@@ -1,15 +1,16 @@
-<#
+﻿<#
 Gera o painel HTML (dashboard.html) a partir dos CSVs coletados pelo Get-WazeFeed.ps1.
 Autocontido (sem dependencias externas) para poder ser aberto localmente offline.
 #>
 
 param(
-    [string]$OutDir = $PSScriptRoot
+    [string]$OutDir = $PSScriptRoot,
+    [string]$ProcessedDir = (Join-Path $PSScriptRoot "processed")
 )
 
 $ErrorActionPreference = "Stop"
 [System.Threading.Thread]::CurrentThread.CurrentCulture = [System.Globalization.CultureInfo]::InvariantCulture
-$processedDir = Join-Path $OutDir "processed"
+$processedDir = $ProcessedDir
 
 function Import-CsvSafe($path) {
     if (Test-Path $path) { return @(Import-Csv $path) }
@@ -21,6 +22,75 @@ function Get-NumOrNull($val) {
     $n = 0.0
     if ([double]::TryParse($val, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$n)) { return $n }
     return $null
+}
+
+# ---- enriquecimento do campo "Via": quando o Waze nao traz nome de rua (so codigo de rodovia
+# tipo "TO-050"/"BR-010", ou vazio), buscamos a via nomeada mais proxima (021_rede_viaria_urbana)
+# e a quadra mais proxima (020_quadras_pop_preenchida) pra formar algo tipo
+# "Avenida NS-4 em frente a quadra 906 sul" ----
+$geodataDir = Join-Path $PSScriptRoot "geodata"
+$viasLookup = @()
+$quadrasLookup = @()
+$viasLookupPath = Join-Path $geodataDir "vias_pontos.csv"
+$quadrasLookupPath = Join-Path $geodataDir "quadras_centro.csv"
+if (Test-Path $viasLookupPath) { $viasLookup = @(Import-Csv $viasLookupPath) }
+if (Test-Path $quadrasLookupPath) { $quadrasLookup = @(Import-Csv $quadrasLookupPath) }
+
+function Test-GenericStreet($street) {
+    if ([string]::IsNullOrWhiteSpace($street)) { return $true }
+    return ($street.Trim() -match '^[A-Z]{2}-\d+$')
+}
+
+function Get-PlanarDist2($lat1, $lon1, $lat2, $lon2) {
+    $dLat = ($lat2 - $lat1) * 111320.0
+    $dLon = ($lon2 - $lon1) * 111320.0 * [math]::Cos([math]::PI / 180 * $lat1)
+    return ($dLat * $dLat) + ($dLon * $dLon)
+}
+
+function Get-NearestViaName($lat, $lon) {
+    $best = $null; $bestDist2 = [double]::MaxValue
+    foreach ($pt in $viasLookup) {
+        $d2 = Get-PlanarDist2 $lat $lon ([double]$pt.lat) ([double]$pt.lon)
+        if ($d2 -lt $bestDist2) { $bestDist2 = $d2; $best = $pt.nome }
+    }
+    if ($best -and $bestDist2 -le (3000 * 3000)) { return $best }
+    return $null
+}
+
+function Get-NearestQuadraDisplay($lat, $lon) {
+    $best = $null; $bestDist2 = [double]::MaxValue
+    foreach ($q in $quadrasLookup) {
+        $d2 = Get-PlanarDist2 $lat $lon ([double]$q.lat) ([double]$q.lon)
+        if ($d2 -lt $bestDist2) { $bestDist2 = $d2; $best = $q.nome }
+    }
+    if (-not $best -or $bestDist2 -gt (3000 * 3000)) { return $null }
+    if ($best -match '^(.*\d)\s+([NnSs])$') {
+        $prefix = $Matches[1]
+        $suf = $Matches[2].ToUpper()
+        $sufTxt = if ($suf -eq "N") { "norte" } else { "sul" }
+        return "$prefix $sufTxt"
+    }
+    return $best
+}
+
+function Get-EnrichedVia($street, $lat, $lon) {
+    if (-not (Test-GenericStreet $street)) { return $street }
+    if ($null -eq $lat -or $null -eq $lon) { return $street }
+    $viaName = Get-NearestViaName $lat $lon
+    if (-not $viaName) { return $street }
+    $quadraDisplay = Get-NearestQuadraDisplay $lat $lon
+    if ($quadraDisplay) { return "$viaName em frente a quadra $quadraDisplay" }
+    return $viaName
+}
+
+# cache por uuid: a mesma ocorrencia se repete em varias linhas de coleta (a cada 5 min enquanto
+# fica ativa) -- calcular a via mais proxima uma vez por uuid evita milhares de buscas repetidas
+$enrichCacheByUuid = @{}
+function Get-EnrichedViaCached($uuid, $street, $lat, $lon) {
+    if ($uuid -and $enrichCacheByUuid.ContainsKey($uuid)) { return $enrichCacheByUuid[$uuid] }
+    $result = Get-EnrichedVia $street $lat $lon
+    if ($uuid) { $enrichCacheByUuid[$uuid] = $result }
+    return $result
 }
 
 $alerts = Import-CsvSafe (Join-Path $processedDir "alerts.csv")
@@ -167,13 +237,15 @@ $criticalPoints = @($clusterKeyed | Group-Object clusterKey | Sort-Object Count 
 
 # ---- alertas ativos agora com coordenadas (para o mapa) ----
 $hazardPoints = @($latestAlerts | Where-Object { (Get-NumOrNull $_.lat) -ne $null -and (Get-NumOrNull $_.lon) -ne $null } | ForEach-Object {
+    $hLat = Get-NumOrNull $_.lat
+    $hLon = Get-NumOrNull $_.lon
     [ordered]@{
         uuid        = $_.uuid
-        lat         = Get-NumOrNull $_.lat
-        lon         = Get-NumOrNull $_.lon
+        lat         = $hLat
+        lon         = $hLon
         type        = $_.type
         subtype     = $_.subtype
-        street      = $_.street
+        street      = (Get-EnrichedViaCached $_.uuid $_.street $hLat $hLon)
         city        = $_.city
         reliability = $_.reliability
         confidence  = $_.confidence
@@ -187,13 +259,15 @@ $latestReport = $null
 $alertComPubMillis = @($alerts | Where-Object { $_.pubMillis -and $_.pubMillis.Trim() -ne "" })
 if ($alertComPubMillis.Count -gt 0) {
     $maisRecente = $alertComPubMillis | Sort-Object { [int64]$_.pubMillis } -Descending | Select-Object -First 1
+    $mrLat = Get-NumOrNull $maisRecente.lat
+    $mrLon = Get-NumOrNull $maisRecente.lon
     $latestReport = [ordered]@{
         uuid       = $maisRecente.uuid
         type       = $maisRecente.type
         subtype    = $maisRecente.subtype
-        street     = $maisRecente.street
-        lat        = Get-NumOrNull $maisRecente.lat
-        lon        = Get-NumOrNull $maisRecente.lon
+        street     = (Get-EnrichedViaCached $maisRecente.uuid $maisRecente.street $mrLat $mrLon)
+        lat        = $mrLat
+        lon        = $mrLon
         pubDateUtc = $maisRecente.pubDateUtc
     }
 }
@@ -211,9 +285,12 @@ $recentAccidentsCount = $recentAccidents.Count
 # limitado as ultimas 5000 linhas de cada pra o arquivo nao crescer demais com o tempo
 $rawAlerts = @($alerts | Where-Object { (Get-NumOrNull $_.lat) -ne $null -and (Get-NumOrNull $_.lon) -ne $null } |
     Select-Object -Last 5000 | ForEach-Object {
+        $raLat = Get-NumOrNull $_.lat
+        $raLon = Get-NumOrNull $_.lon
         [ordered]@{
-            t = $_.collected_at; uuid = $_.uuid; type = $_.type; subtype = $_.subtype; street = $_.street
-            lat = Get-NumOrNull $_.lat; lon = Get-NumOrNull $_.lon
+            t = $_.collected_at; uuid = $_.uuid; type = $_.type; subtype = $_.subtype
+            street = (Get-EnrichedViaCached $_.uuid $_.street $raLat $raLon)
+            lat = $raLat; lon = $raLon
             confidence = Get-NumOrNull $_.confidence; reliability = Get-NumOrNull $_.reliability
             pubDateUtc = $_.pubDateUtc
         }

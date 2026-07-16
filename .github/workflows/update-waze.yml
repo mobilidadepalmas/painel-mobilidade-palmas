@@ -32,7 +32,7 @@ jobs:
       - name: Gerar dashboard.html
         shell: pwsh
         run: |
-          ./scripts/waze/Build-Dashboard.ps1 -OutDir "."
+          ./scripts/waze/Build-Dashboard.ps1 -OutDir "." -ProcessedDir "scripts/waze/processed"
 
       - name: Commit e push se houver mudancas
         shell: pwsh
