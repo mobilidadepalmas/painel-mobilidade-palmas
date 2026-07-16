@@ -165,7 +165,8 @@
   }
   .hazard-label::before { display: none; }
 
-  .filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
+  .filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .filter-help { font-size: 11.5px; color: var(--text-secondary); opacity: 0.85; line-height: 1.5; margin: 0 0 16px 0; }
   .filter-label { font-size: 12.5px; color: var(--text-secondary); font-weight: 600; margin-right: 2px; }
   .chip-sm { font-size: 12px; padding: 5px 11px; }
   .chip-sm.is-active { background: var(--series-1); color: #fff; border-color: var(--series-1); }
@@ -218,6 +219,11 @@
     <label class="date-field">até <input type="date" id="filtro-fim" class="date-input"></label>
     <span class="period-banner" id="period-banner"></span>
   </section>
+  <p class="filter-help" id="filter-help">
+    <b>Tudo (ao vivo)</b>: retrato do instante da última coleta (a cada 5 min) — só o que está ativo agora mesmo.
+    <b>Situação da cidade agora</b>: acumulado de tudo que esteve ativo em algum momento da última 1 hora (~12 coletas), mesmo que já tenha passado.
+    <b>Hoje / 7 dias / 30 dias / período personalizado</b>: todas as ocorrências registradas na janela de datas escolhida.
+  </p>
 
   <section class="kpi-row" id="kpi-row"></section>
 
