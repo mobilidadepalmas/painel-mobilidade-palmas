@@ -86,9 +86,14 @@
     .accident-badge { animation: none; }
   }
   .toolbar { display: flex; gap: 8px; margin-top: 12px; opacity: 0; animation: fade-in 0.6s ease-out 1.05s forwards; }
-  button.chip { font: inherit; font-size: 13px; background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
-  button.chip:hover { filter: brightness(0.97); }
-  :root[data-theme="dark"] button.chip:hover, @media (prefers-color-scheme: dark) { }
+  .chip { font: inherit; font-size: 13px; background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; cursor: pointer; display: inline-block; text-decoration: none; }
+  .chip:hover { filter: brightness(0.97); }
+  .chip.is-disabled { opacity: 0.45; pointer-events: none; }
+  :root[data-theme="dark"] .chip:hover, @media (prefers-color-scheme: dark) { }
+  .type-filter-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .type-filter-list-wrap { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+  .type-filter-list-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .type-filter-list-head span { font-size: 13px; font-weight: 600; margin-right: auto; }
 
   .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
   .stat-tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
@@ -162,8 +167,8 @@
 
   .filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
   .filter-label { font-size: 12.5px; color: var(--text-secondary); font-weight: 600; margin-right: 2px; }
-  button.chip-sm { font-size: 12px; padding: 5px 11px; }
-  button.chip-sm.is-active { background: var(--series-1); color: #fff; border-color: var(--series-1); }
+  .chip-sm { font-size: 12px; padding: 5px 11px; }
+  .chip-sm.is-active { background: var(--series-1); color: #fff; border-color: var(--series-1); }
   .date-field { font-size: 12px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 5px; }
   .date-input { font: inherit; font-size: 12px; background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; }
   .period-banner { font-size: 12px; color: var(--series-1); font-weight: 600; margin-left: 4px; }
@@ -223,6 +228,15 @@
       <div id="map-info" class="map-info">Selecione um ponto no mapa para ver a via, a região exata e o histórico de ocorrências.</div>
       <div id="map"></div>
       <div class="legend-row" id="legend-map"></div>
+      <div class="type-filter-row" id="type-filter-row"></div>
+      <div class="type-filter-list-wrap" id="type-filter-list-wrap">
+        <div class="type-filter-list-head">
+          <span id="type-filter-list-title">Todas as ocorrências no mapa</span>
+          <button class="chip chip-sm" id="btn-export-pdf">Baixar PDF</button>
+          <a class="chip chip-sm" id="btn-export-gpkg" download>Baixar GPKG</a>
+        </div>
+        <div class="table-wrap"><table class="data-table" id="type-filter-table"></table></div>
+      </div>
     </div>
     <div class="card wide">
       <h2>Buscar por tipo de ocorrência</h2>
@@ -723,7 +737,11 @@
   // ---------- dados brutos + recalculo por periodo selecionado ----------
   function parseLocal(t) {
     if (!t) return NaN;
-    const d = new Date(t.replace(" ", "T"));
+    let s = t.replace(" ", "T");
+    // collected_at/pubDateUtc vem em UTC mas sem "Z" -- sem isso o navegador interpreta
+    // como hora local e o filtro de periodo fica ~3h deslocado (mesmo bug corrigido em fmtTime).
+    if (!/[Zz]|[+-]\d\d:\d\d$/.test(s)) s += "Z";
+    const d = new Date(s);
     return d.getTime();
   }
   const RAW = {
@@ -752,7 +770,9 @@
     const dedup = dedupHazards(alertsArr);
     const counts = new Map();
     dedup.forEach(a => counts.set(a.type, (counts.get(a.type) || 0) + 1));
-    return Array.from(counts.entries()).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+    return Array.from(counts.entries())
+      .map(([type, value]) => ({ type, label: friendlyOccurrenceLabel(type, null), value }))
+      .sort((a, b) => b.value - a.value);
   }
   function computeTopStreets(jamsArr) {
     const groups = new Map();
@@ -885,7 +905,12 @@
   }
 
   let mapInstance = null;
+  let hazardMarkerEntries = [];
+  let activeTypeFilter = null;
+  let currentFilteredHazards = [];
   function initMap(view) {
+    hazardMarkerEntries = [];
+    activeTypeFilter = null;
     const mapInfo = document.getElementById("map-info");
     const points = view.criticalPoints || [];
     const hazards = view.hazardPoints || [];
@@ -1001,6 +1026,7 @@
       }
       marker.bindPopup(popup, { maxWidth: 220 });
       marker.on("click", () => map.flyTo([hz.lat, hz.lon], 18, { duration: 1.1 }));
+      hazardMarkerEntries.push({ marker, hz });
     });
 
     if (bounds.length > 1) map.fitBounds(bounds, { padding: [30, 30] });
@@ -1015,6 +1041,68 @@
       item.appendChild(sw); item.appendChild(txt);
       legendRoot.appendChild(item);
     });
+
+    renderTypeFilterChips(view);
+    renderFilteredOccurrenceList(view);
+  }
+
+  // ---------- filtro por tipo de ocorrencia (chips acima do mapa + lista abaixo) ----------
+  function applyHazardTypeFilter(view, filterType) {
+    activeTypeFilter = filterType;
+    if (mapInstance) {
+      hazardMarkerEntries.forEach(entry => {
+        const match = !filterType || entry.hz.type === filterType;
+        const onMap = mapInstance.hasLayer(entry.marker);
+        if (match && !onMap) entry.marker.addTo(mapInstance);
+        else if (!match && onMap) mapInstance.removeLayer(entry.marker);
+      });
+    }
+    renderTypeFilterChips(view);
+    renderFilteredOccurrenceList(view);
+  }
+
+  function renderTypeFilterChips(view) {
+    const root = document.getElementById("type-filter-row");
+    root.textContent = "";
+    const makeChip = (typeKey, label, count) => {
+      const btn = document.createElement("button");
+      btn.className = "chip chip-sm" + (activeTypeFilter === typeKey ? " is-active" : "");
+      btn.textContent = label + (count != null ? " (" + fmtNum(count) + ")" : "");
+      btn.addEventListener("click", () => applyHazardTypeFilter(view, typeKey));
+      root.appendChild(btn);
+    };
+    makeChip(null, "Todos", view.hazardPoints.length);
+    view.alertsByType.forEach(t => makeChip(t.type, t.label, t.value));
+  }
+
+  function renderFilteredOccurrenceList(view) {
+    const titleEl = document.getElementById("type-filter-list-title");
+    const table = document.getElementById("type-filter-table");
+    const filtered = activeTypeFilter ? view.hazardPoints.filter(h => h.type === activeTypeFilter) : view.hazardPoints.slice();
+    currentFilteredHazards = filtered;
+    const label = activeTypeFilter ? friendlyOccurrenceLabel(activeTypeFilter, null) : "Todas as ocorrências";
+    titleEl.textContent = label + " no mapa (" + fmtNum(filtered.length) + ")";
+    table.textContent = "";
+    const thead = document.createElement("thead");
+    const trh = document.createElement("tr");
+    ["Tipo", "Via", "Coordenadas", "Registrado em"].forEach(h => { const th = document.createElement("th"); th.textContent = h; trh.appendChild(th); });
+    thead.appendChild(trh); table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    if (!filtered.length) {
+      const tr = document.createElement("tr"); const td = document.createElement("td");
+      td.colSpan = 4; td.className = "empty-msg"; td.textContent = "Nenhuma ocorrência encontrada.";
+      tr.appendChild(td); tbody.appendChild(tr);
+    } else {
+      filtered.slice().sort((a, b) => (b.tMs || 0) - (a.tMs || 0)).forEach(hz => {
+        const tr = document.createElement("tr");
+        const c1 = document.createElement("td"); c1.textContent = friendlyOccurrenceLabel(hz.type, hz.subtype); c1.style.textAlign = "left"; tr.appendChild(c1);
+        const c2 = document.createElement("td"); c2.textContent = hz.street || "—"; c2.style.textAlign = "left"; tr.appendChild(c2);
+        const c3 = document.createElement("td"); c3.textContent = hz.lat.toFixed(5) + ", " + hz.lon.toFixed(5); tr.appendChild(c3);
+        const c4 = document.createElement("td"); c4.textContent = fmtTime(hz.pubDateUtc || hz.t); tr.appendChild(c4);
+        tbody.appendChild(tr);
+      });
+    }
+    table.appendChild(tbody);
   }
 
   // ---------- ordinal ramps (CSS vars resolve per light/dark automatically) ----------
