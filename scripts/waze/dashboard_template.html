@@ -5,7 +5,7 @@
 <title>Painel de Tráfego — Waze (SEMOB Palmas)</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 <style>
-  .viz-root {
+  :root {
     color-scheme: light;
     --surface-1:      #fcfcfb;
     --page:           #f9f9f7;
@@ -25,7 +25,7 @@
     --len-1: #86b6ef; --len-2: #5598e7; --len-3: #2a78d6; --len-4: #1c5cab; --len-5: #104281;
   }
   @media (prefers-color-scheme: dark) {
-    :root:where(:not([data-theme="light"])) .viz-root {
+    :root:where(:not([data-theme="light"])) {
       color-scheme: dark;
       --surface-1:      #1a1a19;
       --page:           #0d0d0d;
@@ -41,7 +41,7 @@
       --len-1: #b7d3f6; --len-2: #86b6ef; --len-3: #3987e5; --len-4: #256abf; --len-5: #184f95;
     }
   }
-  :root[data-theme="dark"] .viz-root {
+  :root[data-theme="dark"] {
     color-scheme: dark;
     --surface-1:      #1a1a19;
     --page:           #0d0d0d;
