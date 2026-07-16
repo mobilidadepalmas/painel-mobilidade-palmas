@@ -165,6 +165,15 @@ if ($alertComPubMillis.Count -gt 0) {
     }
 }
 
+# ---- acidentes recentes (ultimas 5h) para o indicador piscante "ACIDENTE" no titulo ----
+$nowUtc = (Get-Date).ToUniversalTime()
+$janelaAcidentes = $nowUtc.AddHours(-5)
+$recentAccidents = @($alerts | Where-Object {
+    $_.type -eq "ACCIDENT" -and $_.pubDateUtc -and $_.pubDateUtc.Trim() -ne "" -and
+    ([datetime]$_.pubDateUtc) -ge $janelaAcidentes
+} | Select-Object -ExpandProperty uuid -Unique)
+$recentAccidentsCount = $recentAccidents.Count
+
 # ---- dados brutos (linha a linha) para o filtro de periodo no navegador ----
 # limitado as ultimas 5000 linhas de cada pra o arquivo nao crescer demais com o tempo
 $rawAlerts = @($alerts | Where-Object { (Get-NumOrNull $_.lat) -ne $null -and (Get-NumOrNull $_.lon) -ne $null } |
@@ -213,6 +222,7 @@ $data = [ordered]@{
     criticalPoints = $criticalPoints
     hazardPoints   = $hazardPoints
     latestReport   = $latestReport
+    recentAccidentsCount = $recentAccidentsCount
     topStreetsDetail = $topStreetsDetail
     rawAlerts      = $rawAlerts
     rawJams        = $rawJams

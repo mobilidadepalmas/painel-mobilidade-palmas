@@ -74,6 +74,17 @@
   }
   .pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); animation: pulse 1.8s ease-in-out infinite; }
   @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--good) 55%, transparent); } 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--good) 0%, transparent); } }
+  .accident-badge {
+    display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700;
+    color: #fff; background: var(--critical); border-radius: 999px; padding: 5px 14px; margin-top: 10px;
+    animation: accident-blink 1.1s ease-in-out infinite;
+  }
+  .accident-badge.hidden { display: none; }
+  .accident-badge .dot { width: 8px; height: 8px; border-radius: 50%; background: #fff; }
+  @keyframes accident-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+  @media (prefers-reduced-motion: reduce) {
+    .accident-badge { animation: none; }
+  }
   .toolbar { display: flex; gap: 8px; margin-top: 12px; opacity: 0; animation: fade-in 0.6s ease-out 1.05s forwards; }
   button.chip { font: inherit; font-size: 13px; background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
   button.chip:hover { filter: brightness(0.97); }
@@ -125,6 +136,7 @@
   .popup-title { font-weight: 700; margin-bottom: 4px; }
   .popup-row { font-size: 12px; color: var(--text-secondary); display: flex; justify-content: space-between; gap: 12px; }
   .popup-row b { color: var(--text-primary); }
+  .popup-desc { font-size: 11.5px; color: var(--text-secondary); opacity: 0.9; line-height: 1.35; margin: 4px 0 6px; }
   .popup-region { font-size: 12px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--gridline); font-style: italic; color: var(--text-secondary); }
 
   .jam-pulse { transform-box: fill-box; transform-origin: center; }
@@ -162,7 +174,7 @@
   .street-detail .empty-msg { padding: 8px 0; text-align: left; }
 
   .update-toast {
-    position: fixed; bottom: 20px; right: 20px; max-width: 320px; background: var(--surface-1);
+    position: fixed; bottom: 20px; right: 20px; max-width: 340px; background: var(--surface-1);
     color: var(--text-primary); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.18); z-index: 200;
     transform: translateY(12px); opacity: 0; transition: transform 0.35s ease, opacity 0.35s ease;
@@ -171,12 +183,17 @@
   .update-toast.hidden { display: none; }
   .toast-title { font-weight: 700; font-size: 13px; color: var(--good); margin-bottom: 4px; }
   .toast-body { font-size: 12.5px; color: var(--text-secondary); line-height: 1.4; }
+  .toast-desc {
+    font-size: 11.5px; color: var(--text-secondary); opacity: 0.85; line-height: 1.4;
+    margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border);
+  }
 </style>
 </head>
 <body>
 <div class="viz-root">
   <header class="top">
     <h1 class="hero-title" id="hero-title"></h1>
+    <div class="accident-badge hidden" id="accident-badge" role="alert"><span class="dot"></span><span id="accident-badge-text">ACIDENTE</span></div>
     <div class="update-badge"><span class="pulse-dot"></span>Atualiza automaticamente a cada 5 minutos</div>
     <div class="subtitle" id="subtitle">Palmas (TO) · SEMOB</div>
     <div class="toolbar">
@@ -188,6 +205,7 @@
   <section class="filter-row" id="filter-row">
     <span class="filter-label">Período:</span>
     <button class="chip chip-sm is-active" data-preset="all">Tudo (ao vivo)</button>
+    <button class="chip chip-sm" data-preset="30min">Situação da cidade agora</button>
     <button class="chip chip-sm" data-preset="today">Hoje</button>
     <button class="chip chip-sm" data-preset="7d">Últimos 7 dias</button>
     <button class="chip chip-sm" data-preset="30d">Últimos 30 dias</button>
@@ -253,6 +271,7 @@
 <div id="update-toast" class="update-toast hidden" role="status">
   <div class="toast-title">Atualização</div>
   <div class="toast-body" id="update-toast-body"></div>
+  <div class="toast-desc" id="update-toast-desc"></div>
 </div>
 
 <script id="data-json" type="application/json">__DATA_JSON__</script>
@@ -296,14 +315,85 @@
   const statusHex = { good: "var(--good)", warning: "var(--warning)", serious: "var(--serious)", critical: "var(--critical)" };
   const statusLabel = { good: "Livre", warning: "Atenção", serious: "Sério", critical: "Crítico" };
 
-  // ---------- rotulos amigaveis (tipo de ocorrencia / fluxo) ----------
+  // ---------- rotulos e explicacoes amigaveis (tipo de ocorrencia / fluxo) ----------
+  // Cada ocorrencia do Waze e um "pedido"/report enviado por um usuario do aplicativo (motorista),
+  // nao uma medicao automatica — por isso a explicacao deixa isso claro pra quem nao conhece o app.
+  const OCCURRENCE_INFO = {
+    ACCIDENT: {
+      label: "ACIDENTE",
+      default: "Um usuário do Waze reportou um acidente de trânsito neste local.",
+      subtypes: {
+        ACCIDENT_MINOR: { label: "ACIDENTE LEVE", desc: "Um usuário do Waze reportou um acidente de trânsito considerado leve neste local." },
+        ACCIDENT_MAJOR: { label: "ACIDENTE GRAVE", desc: "Um usuário do Waze reportou um acidente de trânsito considerado grave neste local." }
+      }
+    },
+    JAM: {
+      label: "CONGESTIONAMENTO REPORTADO",
+      default: "Um usuário do Waze reportou manualmente trânsito lento ou parado neste trecho (é um alerta enviado por uma pessoa — diferente dos congestionamentos medidos automaticamente pelo GPS, que aparecem nos gráficos de \"vias com mais ocorrências\").",
+      subtypes: {
+        JAM_MODERATE_TRAFFIC: { label: "TRÂNSITO MODERADO", desc: "Um usuário do Waze reportou trânsito moderado neste trecho." },
+        JAM_HEAVY_TRAFFIC: { label: "TRÂNSITO INTENSO", desc: "Um usuário do Waze reportou trânsito intenso neste trecho." },
+        JAM_STAND_STILL_TRAFFIC: { label: "TRÂNSITO PARADO", desc: "Um usuário do Waze reportou trânsito completamente parado neste trecho." },
+        JAM_LIGHT_TRAFFIC: { label: "TRÂNSITO LEVE", desc: "Um usuário do Waze reportou um pequeno engarrafamento neste trecho." }
+      }
+    },
+    HAZARD: {
+      label: "PERIGO NA VIA",
+      default: "Um usuário do Waze reportou algum risco ou obstáculo na pista neste local.",
+      subtypes: {
+        HAZARD_ON_ROAD_POT_HOLE: { label: "BURACO NA PISTA", desc: "Um usuário do Waze reportou um buraco na pista neste local." },
+        HAZARD_ON_ROAD_OBJECT: { label: "OBJETO NA PISTA", desc: "Um usuário do Waze reportou um objeto solto obstruindo a pista neste local." },
+        HAZARD_ON_ROAD_CONSTRUCTION: { label: "OBRA NA PISTA", desc: "Um usuário do Waze reportou obra ou manutenção na pista neste local." },
+        HAZARD_ON_ROAD_TRAFFIC_LIGHT_FAULT: { label: "SEMÁFORO COM DEFEITO", desc: "Um usuário do Waze reportou um semáforo com defeito neste local." },
+        HAZARD_ON_ROAD_ROAD_KILL: { label: "ANIMAL MORTO NA PISTA", desc: "Um usuário do Waze reportou um animal morto na pista neste local." },
+        HAZARD_ON_ROAD_LANE_CLOSED: { label: "FAIXA INTERDITADA", desc: "Um usuário do Waze reportou uma faixa interditada neste local." },
+        HAZARD_ON_SHOULDER_CAR_STOPPED: { label: "VEÍCULO PARADO NO ACOSTAMENTO", desc: "Um usuário do Waze reportou um veículo parado no acostamento neste local." },
+        HAZARD_ON_SHOULDER_ANIMALS: { label: "ANIMAIS PRÓXIMOS À VIA", desc: "Um usuário do Waze reportou animais próximos à via neste local." },
+        HAZARD_WEATHER_FOG: { label: "NEBLINA", desc: "Um usuário do Waze reportou neblina reduzindo a visibilidade neste local." },
+        HAZARD_WEATHER_FLOOD: { label: "ALAGAMENTO", desc: "Um usuário do Waze reportou alagamento na via neste local." },
+        HAZARD_WEATHER_HEAVY_RAIN: { label: "CHUVA FORTE", desc: "Um usuário do Waze reportou chuva forte afetando a via neste local." },
+        HAZARD_ON_ROAD_ICE: { label: "PISTA ESCORREGADIA", desc: "Um usuário do Waze reportou pista escorregadia neste local." }
+      }
+    },
+    ROAD_CLOSED: {
+      label: "VIA FECHADA",
+      default: "Um usuário do Waze (ou um órgão de trânsito) reportou o fechamento total da via neste local.",
+      subtypes: {
+        ROAD_CLOSED_CONSTRUCTION: { label: "VIA FECHADA — OBRA", desc: "A via está fechada para obra ou manutenção neste local." },
+        ROAD_CLOSED_EVENT: { label: "VIA FECHADA — EVENTO", desc: "A via está fechada por causa de um evento (show, procissão, prova esportiva etc.) neste local." },
+        ROAD_CLOSED_HAZARD: { label: "VIA FECHADA — RISCO", desc: "A via está fechada por segurança devido a algum risco neste local." }
+      }
+    },
+    WEATHERHAZARD: {
+      label: "ALERTA CLIMÁTICO",
+      default: "Um usuário do Waze reportou uma condição climática perigosa (chuva forte, neblina, alagamento etc.) afetando a via neste local."
+    },
+    CONSTRUCTION: {
+      label: "OBRA NA VIA",
+      default: "Um usuário do Waze reportou obra em andamento nesta via."
+    },
+    POLICE: {
+      label: "FISCALIZAÇÃO",
+      default: "Um usuário do Waze reportou a presença de fiscalização de trânsito (polícia/blitz) neste local."
+    },
+    MISC: {
+      label: "OUTRA OCORRÊNCIA",
+      default: "Um usuário do Waze reportou uma ocorrência no trânsito que não se encaixa nas outras categorias."
+    }
+  };
   function friendlyOccurrenceLabel(type, subtype) {
-    if (type === "HAZARD" && subtype === "HAZARD_ON_ROAD_POT_HOLE") return "TAPA BURACO";
-    if (type === "HAZARD") return "PERIGO NA VIA";
-    if (type === "ROAD_CLOSED") return "VIA FECHADA";
-    if (type === "ACCIDENT") return "ACIDENTE";
-    if (type === "WEATHERHAZARD") return "ALERTA CLIMÁTICO";
-    return type || "OCORRÊNCIA";
+    const info = OCCURRENCE_INFO[type];
+    if (!info) return type || "OCORRÊNCIA";
+    if (subtype && info.subtypes && info.subtypes[subtype]) return info.subtypes[subtype].label;
+    return info.label;
+  }
+  function occurrenceDescription(type, subtype) {
+    const info = OCCURRENCE_INFO[type];
+    if (!info) {
+      return "Ocorrência do tipo \"" + (type || "desconhecido") + "\" reportada por um usuário do Waze — categoria ainda não catalogada neste painel.";
+    }
+    if (subtype && info.subtypes && info.subtypes[subtype]) return info.subtypes[subtype].desc;
+    return info.default;
   }
   function flowLabelForSeverity(key) {
     return { warning: "FLUXO LENTO", serious: "FLUXO INTENSO", critical: "TRÂNSITO PARADO" }[key] || null;
@@ -895,6 +985,9 @@
       const title = document.createElement("div"); title.className = "popup-title";
       title.textContent = label;
       popup.appendChild(title);
+      const desc = document.createElement("div"); desc.className = "popup-desc";
+      desc.textContent = occurrenceDescription(hz.type, hz.subtype);
+      popup.appendChild(desc);
       const row = document.createElement("div"); row.className = "popup-row";
       const l = document.createElement("span"); l.textContent = hz.street || "Via sem nome";
       row.appendChild(l);
@@ -1016,11 +1109,13 @@
     if (!report) return;
     const toast = document.getElementById("update-toast");
     const body = document.getElementById("update-toast-body");
+    const descEl = document.getElementById("update-toast-desc");
     body.textContent = "";
     const label = friendlyOccurrenceLabel(report.type, report.subtype);
     const texto = "Enviado pedido de " + label.toLowerCase() + " recentemente" +
       (report.street ? (" — " + report.street) : "") + ", registrado em " + fmtTime(report.pubDateUtc) + ".";
     body.textContent = texto;
+    descEl.textContent = occurrenceDescription(report.type, report.subtype);
     toast.classList.remove("hidden");
     requestAnimationFrame(() => toast.classList.add("show"));
     setTimeout(() => {
@@ -1110,7 +1205,20 @@
     "🔄 Atualiza automaticamente a cada 5 minutos · última coleta: " + fmtTime(DATA.lastCollection) +
     " · " + fmtNum(DATA.totals.collections) + " coletas acumuladas · Palmas (TO) · SEMOB";
 
+  function updateAccidentBadge() {
+    const badge = document.getElementById("accident-badge");
+    const text = document.getElementById("accident-badge-text");
+    const n = DATA.recentAccidentsCount || 0;
+    if (n > 0) {
+      text.textContent = "ACIDENTE" + (n > 1 ? " — " + n + " reportados nas últimas 5h" : " — reportado nas últimas 5h");
+      badge.classList.remove("hidden");
+    } else {
+      badge.classList.add("hidden");
+    }
+  }
+
   renderHeroTitle();
+  updateAccidentBadge();
   renderView(buildView(null));
   renderTable();
   showUpdateToast();
@@ -1134,6 +1242,14 @@
         document.getElementById("filtro-fim").value = "";
         document.getElementById("period-banner").textContent = "";
         renderView(buildView(null));
+      } else if (preset === "30min") {
+        btn.classList.add("is-active");
+        document.getElementById("filtro-inicio").value = "";
+        document.getElementById("filtro-fim").value = "";
+        const end = Date.now();
+        const start = end - 60 * 60 * 1000;
+        document.getElementById("period-banner").textContent = "Mostrando: situação da cidade agora (última 1 hora acumulada)";
+        renderView(buildView({ start, end }));
       } else if (preset === "today") { btn.classList.add("is-active"); setPreset("today"); }
       else if (preset === "7d") { btn.classList.add("is-active"); setPreset(7); }
       else if (preset === "30d") { btn.classList.add("is-active"); setPreset(30); }
