@@ -33,13 +33,46 @@ $latestJamsTs   = ($jams   | Select-Object -ExpandProperty collected_at -Unique 
 $latestAlerts = @($alerts | Where-Object { $_.collected_at -eq $latestAlertsTs })
 $latestJams   = @($jams   | Where-Object { $_.collected_at -eq $latestJamsTs })
 
+# ---- via fechada por acao do poder publico (obras/eventos) nao conta como congestionamento
+# "critico": o fechamento de via feito pela propria prefeitura ja aparece como Alerta (VIA FECHADA)
+# no mapa; o engarrafamento que ele gera ao redor e consequencia esperada da interdicao, nao uma
+# emergencia de transito. Por isso excluimos jams proximos de um ROAD_CLOSED da severidade/
+# pontos-criticos/ranking de vias -- eles continuam visiveis, so nao contam como "critico".
+function Get-DistanceMeters($lat1, $lon1, $lat2, $lon2) {
+    $R = 6371000.0
+    $dLat = [math]::PI / 180 * ($lat2 - $lat1)
+    $dLon = [math]::PI / 180 * ($lon2 - $lon1)
+    $a = [math]::Sin($dLat / 2) * [math]::Sin($dLat / 2) +
+         [math]::Cos([math]::PI / 180 * $lat1) * [math]::Cos([math]::PI / 180 * $lat2) *
+         [math]::Sin($dLon / 2) * [math]::Sin($dLon / 2)
+    $c = 2 * [math]::Atan2([math]::Sqrt($a), [math]::Sqrt(1 - $a))
+    return $R * $c
+}
+$CLOSURE_RADIUS_M = 200
+$closurePoints = @($alerts | Where-Object {
+    $_.type -eq "ROAD_CLOSED" -and (Get-NumOrNull $_.lat) -ne $null -and (Get-NumOrNull $_.lon) -ne $null
+} | ForEach-Object {
+    [pscustomobject]@{ lat = (Get-NumOrNull $_.lat); lon = (Get-NumOrNull $_.lon) }
+} | Group-Object { [math]::Round($_.lat, 3).ToString() + "|" + [math]::Round($_.lon, 3).ToString() } | ForEach-Object { $_.Group[0] })
+
+function Test-NearClosure($lat, $lon) {
+    if ($null -eq $lat -or $null -eq $lon) { return $false }
+    foreach ($cp in $closurePoints) {
+        if ((Get-DistanceMeters $lat $lon $cp.lat $cp.lon) -le $CLOSURE_RADIUS_M) { return $true }
+    }
+    return $false
+}
+
+$jamsNoClosure = @($jams | Where-Object { -not (Test-NearClosure (Get-NumOrNull $_.lat) (Get-NumOrNull $_.lon)) })
+$latestJamsNoClosure = @($latestJams | Where-Object { -not (Test-NearClosure (Get-NumOrNull $_.lat) (Get-NumOrNull $_.lon)) })
+
 # ---- alerts by type (snapshot atual) ----
 $alertsByType = @($latestAlerts | Group-Object type | Sort-Object Count -Descending | ForEach-Object {
     [ordered]@{ label = $_.Name; value = $_.Count }
 })
 
-# ---- vias com mais ocorrencias de congestionamento (historico completo) ----
-$topStreetsGroups = @($jams | Where-Object { $_.street -and $_.street.Trim() -ne "" } |
+# ---- vias com mais ocorrencias de congestionamento (historico completo, exclui congestionamento causado por via fechada administrativa) ----
+$topStreetsGroups = @($jamsNoClosure | Where-Object { $_.street -and $_.street.Trim() -ne "" } |
     Group-Object street | Sort-Object Count -Descending | Select-Object -First 10)
 
 $topStreets = @($topStreetsGroups | ForEach-Object {
@@ -61,9 +94,9 @@ foreach ($g in $topStreetsGroups) {
     $topStreetsDetail[$g.Name] = $ocorrencias
 }
 
-# ---- severidade dos congestionamentos ativos agora ----
+# ---- severidade dos congestionamentos ativos agora (exclui congestionamento por via fechada administrativa) ----
 $sevGood = 0; $sevWarning = 0; $sevSerious = 0; $sevCritical = 0
-foreach ($j in $latestJams) {
+foreach ($j in $latestJamsNoClosure) {
     $lvl = 0
     [int]::TryParse($j.level, [ref]$lvl) | Out-Null
     if     ($lvl -le 1) { $sevGood++ }
@@ -102,8 +135,8 @@ if ($tvSorted.Count -gt 0) {
     foreach ($l in 1..4) { $usersInJamsNow += (Get-NumOrZero $lastTv."usersOnJams_level$l") }
 }
 
-# ---- pontos criticos: clusters de congestionamento recorrente com coordenadas ----
-$jamsWithCoords = @($jams | Where-Object { (Get-NumOrNull $_.lat) -ne $null -and (Get-NumOrNull $_.lon) -ne $null })
+# ---- pontos criticos: clusters de congestionamento recorrente com coordenadas (exclui via fechada administrativa) ----
+$jamsWithCoords = @($jamsNoClosure | Where-Object { (Get-NumOrNull $_.lat) -ne $null -and (Get-NumOrNull $_.lon) -ne $null })
 $clusterKeyed = $jamsWithCoords | ForEach-Object {
     $latR = [math]::Round((Get-NumOrNull $_.lat), 4)
     $lonR = [math]::Round((Get-NumOrNull $_.lon), 4)
@@ -187,10 +220,13 @@ $rawAlerts = @($alerts | Where-Object { (Get-NumOrNull $_.lat) -ne $null -and (G
     })
 
 $rawJams = @($jams | Select-Object -Last 5000 | ForEach-Object {
+    $jLat = Get-NumOrNull $_.lat
+    $jLon = Get-NumOrNull $_.lon
     [ordered]@{
         t = $_.collected_at; id = $_.id; street = $_.street; level = (Get-NumOrNull $_.level)
         speedKMH = Get-NumOrNull $_.speedKMH; length_m = Get-NumOrNull $_.length_m
-        lat = Get-NumOrNull $_.lat; lon = Get-NumOrNull $_.lon
+        lat = $jLat; lon = $jLon
+        closureCaused = (Test-NearClosure $jLat $jLon)
     }
 })
 
@@ -211,7 +247,7 @@ $data = [ordered]@{
     lastCollection = $latestJamsTs
     totals = [ordered]@{
         activeAlerts   = $latestAlerts.Count
-        activeJams     = $latestJams.Count
+        activeJams     = $latestJamsNoClosure.Count
         usersInJamsNow = [math]::Round($usersInJamsNow)
         severityLabel  = $severityLabel
         collections    = $tvSorted.Count

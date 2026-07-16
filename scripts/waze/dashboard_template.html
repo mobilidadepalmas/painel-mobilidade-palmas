@@ -756,8 +756,11 @@
   };
 
   function bucketSeverity(rows) {
+    // congestionamento causado por via fechada administrativamente (obra/evento da propria
+    // prefeitura) nao conta como severidade critica -- ja aparece como Alerta (VIA FECHADA).
     let good = 0, warning = 0, serious = 0, critical = 0;
     rows.forEach(r => {
+      if (r.closureCaused) return;
       const l = r.level || 0;
       if (l <= 1) good++; else if (l === 2) warning++; else if (l <= 4) serious++; else critical++;
     });
@@ -783,7 +786,7 @@
   function computeTopStreets(jamsArr) {
     const groups = new Map();
     jamsArr.forEach(j => {
-      if (!j.street) return;
+      if (!j.street || j.closureCaused) return;
       if (!groups.has(j.street)) groups.set(j.street, []);
       groups.get(j.street).push(j);
     });
@@ -797,7 +800,7 @@
   function computeCriticalPoints(jamsArr) {
     const groups = new Map();
     jamsArr.forEach(j => {
-      if (j.lat == null || j.lon == null) return;
+      if (j.lat == null || j.lon == null || j.closureCaused) return;
       const key = j.lat.toFixed(4) + "|" + j.lon.toFixed(4) + "|" + (j.street || "");
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(j);
@@ -845,7 +848,7 @@
     let severityLabel = "good";
     if (sev.critical > 0) severityLabel = "critical"; else if (sev.serious > 0) severityLabel = "serious"; else if (sev.warning > 0) severityLabel = "warning";
     const hazardPoints = dedupHazards(alertsSlice);
-    const distinctJamIds = new Set(jamsSlice.map(j => j.id)).size;
+    const distinctJamIds = new Set(jamsSlice.filter(j => !j.closureCaused).map(j => j.id)).size;
 
     // fatia a serie temporal (traffic view) pelo mesmo periodo
     const allTs = DATA.timeSeries.timestamps || [];
@@ -945,9 +948,10 @@
     const bounds = [];
 
     points.forEach(pt => {
-      const radius = 6 + Math.min(pt.occurrences, 40) * 0.35;
+      const isFluxoIntenso = pt.severityLabel === "serious";
+      const radius = 6 + Math.min(pt.occurrences, 40) * 0.35 + (isFluxoIntenso ? 3 : 0);
       const flowLabel = flowLabelForSeverity(pt.severityLabel);
-      const pulseClass = flowLabel ? ("jam-pulse jam-pulse-" + pt.severityLabel) : "";
+      const pulseClass = isFluxoIntenso ? "jam-pulse jam-pulse-serious" : "";
       const marker = L.circleMarker([pt.lat, pt.lon], {
         radius: radius,
         color: "var(--surface-1)",
