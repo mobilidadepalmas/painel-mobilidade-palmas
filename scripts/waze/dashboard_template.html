@@ -193,6 +193,17 @@
     font-size: 11.5px; color: var(--text-secondary); opacity: 0.85; line-height: 1.4;
     margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border);
   }
+  #pdf-print-area { display: none; }
+  #pdf-print-area h1 { font-size: 18px; margin: 0 0 4px; }
+  #pdf-print-area .pdf-meta { font-size: 12px; color: #555; margin-bottom: 16px; }
+  #pdf-print-area table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  #pdf-print-area th, #pdf-print-area td { border: 1px solid #ccc; padding: 5px 8px; text-align: left; }
+  #pdf-print-area th { background: #eee; }
+  @media print {
+    body * { visibility: hidden; }
+    #pdf-print-area, #pdf-print-area * { visibility: visible; }
+    #pdf-print-area { display: block; position: absolute; top: 0; left: 0; width: 100%; }
+  }
 </style>
 </head>
 <body>
@@ -244,6 +255,7 @@
         <div class="table-wrap"><table class="data-table" id="type-filter-table"></table></div>
       </div>
     </div>
+    <div id="pdf-print-area"></div>
     <div class="card wide">
       <h2>Buscar por tipo de ocorrência</h2>
       <p class="card-desc">Selecione um tipo (ex.: TAPA BURACO, VIA FECHADA) para ver coordenadas, via e quando cada pedido/ocorrência foi registrado.</p>
@@ -1056,6 +1068,18 @@
     renderFilteredOccurrenceList(view);
   }
 
+  // ---------- clique numa linha da lista filtrada: mapa da zoom exato e abre o popup ----------
+  function focusHazardOnMap(hz) {
+    if (!mapInstance) return;
+    document.getElementById("map").scrollIntoView({ behavior: "smooth", block: "center" });
+    mapInstance.flyTo([hz.lat, hz.lon], 18, { duration: 1.1 });
+    const entry = hazardMarkerEntries.find(e => e.hz.uuid && e.hz.uuid === hz.uuid);
+    if (entry) {
+      if (!mapInstance.hasLayer(entry.marker)) entry.marker.addTo(mapInstance);
+      setTimeout(() => entry.marker.openPopup(), 300);
+    }
+  }
+
   // ---------- filtro por tipo de ocorrencia (chips acima do mapa + lista abaixo) ----------
   function applyHazardTypeFilter(view, filterType) {
     activeTypeFilter = filterType;
@@ -1106,10 +1130,13 @@
       const regMs = hz => parseLocal(hz.pubDateUtc || hz.t) || 0;
       filtered.slice().sort((a, b) => regMs(b) - regMs(a)).forEach(hz => {
         const tr = document.createElement("tr");
+        tr.style.cursor = "pointer";
+        tr.title = "Clique para ver no mapa";
         const c1 = document.createElement("td"); c1.textContent = friendlyOccurrenceLabel(hz.type, hz.subtype); c1.style.textAlign = "left"; tr.appendChild(c1);
         const c2 = document.createElement("td"); c2.textContent = hz.street || "—"; c2.style.textAlign = "left"; tr.appendChild(c2);
         const c3 = document.createElement("td"); c3.textContent = hz.lat.toFixed(5) + ", " + hz.lon.toFixed(5); tr.appendChild(c3);
         const c4 = document.createElement("td"); c4.textContent = fmtTime(hz.pubDateUtc || hz.t); tr.appendChild(c4);
+        tr.addEventListener("click", () => focusHazardOnMap(hz));
         tbody.appendChild(tr);
       });
     }
@@ -1330,6 +1357,44 @@
     const cur = root.getAttribute("data-theme");
     root.setAttribute("data-theme", cur === "dark" ? "light" : "dark");
   });
+
+  function exportFilteredPdf() {
+    const label = activeTypeFilter ? friendlyOccurrenceLabel(activeTypeFilter, null) : "Todas as ocorrências";
+    const area = document.getElementById("pdf-print-area");
+    area.textContent = "";
+    const h1 = document.createElement("h1");
+    h1.textContent = "Painel de Tráfego em Tempo Real — Waze Data Feed";
+    area.appendChild(h1);
+    const h2 = document.createElement("div");
+    h2.style.fontSize = "14px"; h2.style.fontWeight = "600"; h2.style.margin = "0 0 4px";
+    h2.textContent = label + " (" + fmtNum(currentFilteredHazards.length) + " ocorrências)";
+    area.appendChild(h2);
+    const meta = document.createElement("div");
+    meta.className = "pdf-meta";
+    meta.textContent = "Palmas (TO) · SEMOB — gerado em " + new Date().toLocaleString("pt-BR");
+    area.appendChild(meta);
+    const table = document.createElement("table");
+    const thead = document.createElement("thead");
+    const trh = document.createElement("tr");
+    ["Tipo", "Via", "Coordenadas", "Registrado em"].forEach(h => { const th = document.createElement("th"); th.textContent = h; trh.appendChild(th); });
+    thead.appendChild(trh); table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    const regMs = hz => parseLocal(hz.pubDateUtc || hz.t) || 0;
+    currentFilteredHazards.slice().sort((a, b) => regMs(b) - regMs(a)).forEach(hz => {
+      const tr = document.createElement("tr");
+      [
+        friendlyOccurrenceLabel(hz.type, hz.subtype),
+        hz.street || "—",
+        hz.lat.toFixed(5) + ", " + hz.lon.toFixed(5),
+        fmtTime(hz.pubDateUtc || hz.t)
+      ].forEach(v => { const td = document.createElement("td"); td.textContent = v; tr.appendChild(td); });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    area.appendChild(table);
+    window.print();
+  }
+  document.getElementById("btn-export-pdf").addEventListener("click", exportFilteredPdf);
 
   document.querySelectorAll("#filter-row .chip-sm").forEach(btn => {
     btn.addEventListener("click", () => {
