@@ -182,7 +182,7 @@
   .update-toast {
     position: fixed; bottom: 20px; right: 20px; max-width: 340px; background: var(--surface-1);
     color: var(--text-primary); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.18); z-index: 200;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.18); z-index: 5000;
     transform: translateY(12px); opacity: 0; transition: transform 0.35s ease, opacity 0.35s ease;
   }
   .update-toast.show { transform: translateY(0); opacity: 1; }
@@ -1103,7 +1103,8 @@
       td.colSpan = 4; td.className = "empty-msg"; td.textContent = "Nenhuma ocorrência encontrada.";
       tr.appendChild(td); tbody.appendChild(tr);
     } else {
-      filtered.slice().sort((a, b) => (b.tMs || 0) - (a.tMs || 0)).forEach(hz => {
+      const regMs = hz => parseLocal(hz.pubDateUtc || hz.t) || 0;
+      filtered.slice().sort((a, b) => regMs(b) - regMs(a)).forEach(hz => {
         const tr = document.createElement("tr");
         const c1 = document.createElement("td"); c1.textContent = friendlyOccurrenceLabel(hz.type, hz.subtype); c1.style.textAlign = "left"; tr.appendChild(c1);
         const c2 = document.createElement("td"); c2.textContent = hz.street || "—"; c2.style.textAlign = "left"; tr.appendChild(c2);
