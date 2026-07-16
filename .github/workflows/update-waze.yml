@@ -1,0 +1,49 @@
+name: Atualizar dados do Waze
+
+on:
+  schedule:
+    # a cada 5 minutos. O GitHub as vezes atrasa execucoes agendadas muito frequentes sob carga
+    # alta da plataforma - se notar atrasos constantes, aumentar pra "*/15 * * * *".
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-waze
+  cancel-in-progress: false
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do repositorio
+        uses: actions/checkout@v4
+
+      - name: Buscar feed do Waze e acumular historico
+        shell: pwsh
+        env:
+          WAZE_FEED_URL: ${{ secrets.WAZE_FEED_URL }}
+          WAZE_TRAFFICVIEW_URL: ${{ secrets.WAZE_TRAFFICVIEW_URL }}
+        run: |
+          ./scripts/waze/Get-WazeFeed.ps1 -OutDir "scripts/waze"
+
+      - name: Gerar dashboard.html
+        shell: pwsh
+        run: |
+          ./scripts/waze/Build-Dashboard.ps1 -OutDir "."
+
+      - name: Commit e push se houver mudancas
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dashboard.html scripts/waze/processed
+          $staged = git diff --cached --quiet; $hasChanges = ($LASTEXITCODE -ne 0)
+          if ($hasChanges) {
+            git commit -m "Atualiza dados do Waze [skip ci]"
+            git push
+          } else {
+            Write-Host "Nada para commitar."
+          }

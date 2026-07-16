@@ -1,0 +1,1147 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>Painel de Tráfego — Waze (SEMOB Palmas)</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<style>
+  .viz-root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page:           #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-1:       #2a78d6;
+    --good:           #0ca30c;
+    --warning:        #fab219;
+    --serious:        #ec835a;
+    --critical:       #d03b3b;
+    /* rampa ordinal (severidade 0->4 / nivel 1->5), light: nao mais claro que o step 250 */
+    --sev-0: #86b6ef; --sev-1: #5598e7; --sev-2: #2a78d6; --sev-3: #1c5cab; --sev-4: #104281;
+    --len-1: #86b6ef; --len-2: #5598e7; --len-3: #2a78d6; --len-4: #1c5cab; --len-5: #104281;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page:           #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --series-1:       #3987e5;
+      /* rampa ordinal, dark: nao mais escuro que o step 600 */
+      --sev-0: #b7d3f6; --sev-1: #86b6ef; --sev-2: #3987e5; --sev-3: #256abf; --sev-4: #184f95;
+      --len-1: #b7d3f6; --len-2: #86b6ef; --len-3: #3987e5; --len-4: #256abf; --len-5: #184f95;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --page:           #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --series-1:       #3987e5;
+    --sev-0: #b7d3f6; --sev-1: #86b6ef; --sev-2: #3987e5; --sev-3: #256abf; --sev-4: #184f95;
+    --len-1: #b7d3f6; --len-2: #86b6ef; --len-3: #3987e5; --len-4: #256abf; --len-5: #184f95;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--page); color: var(--text-primary); }
+  .viz-root { padding: 24px; max-width: 1200px; margin: 0 auto; }
+  header.top { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; margin-bottom: 24px; padding: 12px 0 20px; }
+  .hero-title { font-size: clamp(22px, 4vw, 34px); font-weight: 700; margin: 0; letter-spacing: -0.01em; overflow: hidden; }
+  .hero-title .word { display: inline-block; opacity: 0; transform: translateY(0.5em); filter: blur(4px); animation: word-in 0.65s cubic-bezier(.22,1,.36,1) forwards; }
+  @keyframes word-in { to { opacity: 1; transform: translateY(0); filter: blur(0); } }
+  .hero-title .word.dim { color: var(--text-secondary); font-weight: 500; }
+  .subtitle { color: var(--text-secondary); font-size: 13px; margin-top: 2px; opacity: 0; animation: fade-in 0.6s ease-out 0.9s forwards; }
+  @keyframes fade-in { to { opacity: 1; } }
+  .update-badge {
+    display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600;
+    color: var(--good); background: color-mix(in srgb, var(--good) 12%, var(--surface-1));
+    border: 1px solid color-mix(in srgb, var(--good) 35%, transparent);
+    border-radius: 999px; padding: 5px 14px; margin-top: 10px;
+    opacity: 0; animation: fade-in 0.6s ease-out 0.75s forwards;
+  }
+  .pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); animation: pulse 1.8s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--good) 55%, transparent); } 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--good) 0%, transparent); } }
+  .toolbar { display: flex; gap: 8px; margin-top: 12px; opacity: 0; animation: fade-in 0.6s ease-out 1.05s forwards; }
+  button.chip { font: inherit; font-size: 13px; background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button.chip:hover { filter: brightness(0.97); }
+  :root[data-theme="dark"] button.chip:hover, @media (prefers-color-scheme: dark) { }
+
+  .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .stat-tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .stat-tile .label { font-size: 12px; color: var(--text-secondary); }
+  .stat-tile .value { font-size: 28px; font-weight: 600; margin-top: 4px; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600; margin-top: 4px; }
+  .badge .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 12px; }
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .card h2 { font-size: 14px; margin: 0 0 4px 0; font-weight: 600; }
+  .card-desc { font-size: 12px; color: var(--text-secondary); margin: 0 0 12px 0; line-height: 1.4; }
+  .card.wide { grid-column: 1 / -1; }
+
+  .axis-label { fill: var(--text-secondary); font-size: 11px; }
+  .axis-label.small { font-size: 10px; fill: var(--text-muted); }
+  .value-label { fill: var(--text-primary); font-size: 11px; font-weight: 600; dominant-baseline: middle; }
+  .gridline { stroke: var(--gridline); stroke-width: 1; }
+  .crosshair { stroke: var(--baseline); stroke-width: 1; }
+  rect.hovered { filter: brightness(0.88); }
+  .bar-hit:focus { outline: none; }
+  .bar-hit:focus rect:first-child { filter: brightness(0.88); }
+
+  .legend-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+  .legend-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+  .empty-msg { color: var(--text-muted); font-size: 13px; padding: 24px 0; text-align: center; }
+
+  #tooltip { position: fixed; pointer-events: none; background: var(--text-primary); color: var(--surface-1); font-size: 12px; padding: 6px 10px; border-radius: 6px; z-index: 100; display: none; max-width: 260px; }
+  #tooltip .t-value { font-weight: 700; }
+  #tooltip .t-row { display: flex; justify-content: space-between; gap: 10px; }
+
+  table.data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.data-table th, table.data-table td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--gridline); font-variant-numeric: tabular-nums; }
+  table.data-table th:first-child, table.data-table td:first-child { text-align: left; }
+  .table-wrap { max-height: 320px; overflow: auto; }
+  .hidden { display: none; }
+
+  #map { height: 480px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+  .map-info { font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; min-height: 16px; }
+  .map-info strong { color: var(--text-primary); }
+  .leaflet-popup-content-wrapper { background: var(--surface-1); color: var(--text-primary); border-radius: 8px; }
+  .leaflet-popup-tip { background: var(--surface-1); }
+  .popup-title { font-weight: 700; margin-bottom: 4px; }
+  .popup-row { font-size: 12px; color: var(--text-secondary); display: flex; justify-content: space-between; gap: 12px; }
+  .popup-row b { color: var(--text-primary); }
+  .popup-region { font-size: 12px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--gridline); font-style: italic; color: var(--text-secondary); }
+
+  .jam-pulse { transform-box: fill-box; transform-origin: center; }
+  .jam-pulse-warning  { animation: markerPulse 1.7s ease-in-out infinite; }
+  .jam-pulse-serious  { animation: markerPulse 1.2s ease-in-out infinite; }
+  .jam-pulse-critical { animation: markerPulse 0.8s ease-in-out infinite; }
+  @keyframes markerPulse {
+    0%   { transform: scale(1);    opacity: 0.9; }
+    50%  { transform: scale(1.6);  opacity: 0.25; }
+    100% { transform: scale(1);    opacity: 0.9; }
+  }
+  .flow-label {
+    font-weight: 700; font-size: 11px; padding: 2px 7px; border-radius: 5px;
+    color: #ffffff !important; background: var(--label-bg, #d03b3b); border: none !important;
+    box-shadow: none !important; white-space: nowrap;
+  }
+  .flow-label::before { display: none; }
+  .hazard-label {
+    font-weight: 700; font-size: 10.5px; padding: 2px 7px; border-radius: 5px;
+    color: #ffffff !important; background: #eb6834; border: none !important; box-shadow: none !important;
+  }
+  .hazard-label::before { display: none; }
+
+  .filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
+  .filter-label { font-size: 12.5px; color: var(--text-secondary); font-weight: 600; margin-right: 2px; }
+  button.chip-sm { font-size: 12px; padding: 5px 11px; }
+  button.chip-sm.is-active { background: var(--series-1); color: #fff; border-color: var(--series-1); }
+  .date-field { font-size: 12px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 5px; }
+  .date-input { font: inherit; font-size: 12px; background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; }
+  .period-banner { font-size: 12px; color: var(--series-1); font-weight: 600; margin-left: 4px; }
+
+  .type-select { font: inherit; font-size: 13px; background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; width: 100%; max-width: 420px; }
+  .street-detail { margin-top: 10px; font-size: 12px; }
+  .street-detail table.data-table { margin-top: 6px; }
+  .street-detail .empty-msg { padding: 8px 0; text-align: left; }
+
+  .update-toast {
+    position: fixed; bottom: 20px; right: 20px; max-width: 320px; background: var(--surface-1);
+    color: var(--text-primary); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.18); z-index: 200;
+    transform: translateY(12px); opacity: 0; transition: transform 0.35s ease, opacity 0.35s ease;
+  }
+  .update-toast.show { transform: translateY(0); opacity: 1; }
+  .update-toast.hidden { display: none; }
+  .toast-title { font-weight: 700; font-size: 13px; color: var(--good); margin-bottom: 4px; }
+  .toast-body { font-size: 12.5px; color: var(--text-secondary); line-height: 1.4; }
+</style>
+</head>
+<body>
+<div class="viz-root">
+  <header class="top">
+    <h1 class="hero-title" id="hero-title"></h1>
+    <div class="update-badge"><span class="pulse-dot"></span>Atualiza automaticamente a cada 5 minutos</div>
+    <div class="subtitle" id="subtitle">Palmas (TO) · SEMOB</div>
+    <div class="toolbar">
+      <button class="chip" id="btn-table">Ver tabela</button>
+      <button class="chip" id="btn-theme">Alternar tema</button>
+    </div>
+  </header>
+
+  <section class="filter-row" id="filter-row">
+    <span class="filter-label">Período:</span>
+    <button class="chip chip-sm is-active" data-preset="all">Tudo (ao vivo)</button>
+    <button class="chip chip-sm" data-preset="today">Hoje</button>
+    <button class="chip chip-sm" data-preset="7d">Últimos 7 dias</button>
+    <button class="chip chip-sm" data-preset="30d">Últimos 30 dias</button>
+    <label class="date-field">De <input type="date" id="filtro-inicio" class="date-input"></label>
+    <label class="date-field">até <input type="date" id="filtro-fim" class="date-input"></label>
+    <span class="period-banner" id="period-banner"></span>
+  </section>
+
+  <section class="kpi-row" id="kpi-row"></section>
+
+  <section class="grid">
+    <div class="card wide">
+      <h2>Mapa de pontos críticos — clique para dar zoom exato no local</h2>
+      <p class="card-desc">Cada bolinha é um trecho com congestionamento recorrente identificado nos dados coletados; o tamanho cresce conforme o ponto se repete. Os pontos laranjas são alertas ativos (buraco, via fechada). Clique em qualquer ponto para o mapa dar zoom exato no local e mostrar rua, região e histórico.</p>
+      <div id="map-info" class="map-info">Selecione um ponto no mapa para ver a via, a região exata e o histórico de ocorrências.</div>
+      <div id="map"></div>
+      <div class="legend-row" id="legend-map"></div>
+    </div>
+    <div class="card wide">
+      <h2>Buscar por tipo de ocorrência</h2>
+      <p class="card-desc">Selecione um tipo (ex.: TAPA BURACO, VIA FECHADA) para ver coordenadas, via e quando cada pedido/ocorrência foi registrado.</p>
+      <select id="tipo-ocorrencia-select" class="type-select"></select>
+      <div class="table-wrap" style="margin-top:10px;"><table class="data-table" id="tipo-ocorrencia-table"></table></div>
+    </div>
+    <div class="card" id="card-alerts-tipo">
+      <h2 id="titulo-chart-alerts">Alertas ativos por tipo (snapshot atual)</h2>
+      <p class="card-desc">Quantidade de alertas reportados pelos motoristas (buraco, via fechada, perigo na pista) que estão ativos agora, neste instante, agrupados por tipo.</p>
+      <div id="chart-alerts"></div>
+    </div>
+    <div class="card" id="card-streets">
+      <h2 id="titulo-chart-streets">Vias com mais ocorrências de congestionamento (histórico acumulado)</h2>
+      <p class="card-desc">Ranking das vias que mais vezes apareceram congestionadas. Clique em uma barra para ver as ocorrências daquela via. Ajuda a identificar os pontos crônicos da cidade, não só o problema do momento.</p>
+      <div id="chart-streets"></div>
+      <div id="street-detail" class="street-detail"></div>
+    </div>
+    <div class="card">
+      <h2>Severidade dos congestionamentos ativos agora</h2>
+      <p class="card-desc">Proporção dos congestionamentos atuais por nível de gravidade, do mais leve (livre) ao mais grave (crítico, trânsito parado).</p>
+      <div id="chart-severity"></div>
+      <div class="legend-row" id="legend-severity"></div>
+    </div>
+    <div class="card wide">
+      <h2>Usuários em vias congestionadas ao longo do tempo, por nível de severidade</h2>
+      <p class="card-desc">Estimativa de quantos motoristas o Waze registra presos em congestionamento a cada coleta (a cada 5 min), divididos por nível de severidade. Mostra como o trânsito piora e melhora ao longo do dia.</p>
+      <div id="chart-users-time"></div>
+      <div class="legend-row" id="legend-users-time"></div>
+    </div>
+    <div class="card wide">
+      <h2>Extensão de congestionamento (m) ao longo do tempo, por nível de severidade</h2>
+      <p class="card-desc">Quantos metros de via estão congestionados a cada coleta, por nível de severidade. Quanto maior a área colorida, mais extenso é o engarrafamento na cidade naquele momento.</p>
+      <div id="chart-length-time"></div>
+      <div class="legend-row" id="legend-length-time"></div>
+    </div>
+    <div class="card wide hidden" id="table-card">
+      <h2>Traffic View — últimas coletas (tabela)</h2>
+      <p class="card-desc">"Motoristas" = quantas pessoas o Waze estima que estão dirigindo em vias naquele nível de trânsito nesta coleta. "Extensão" = quantos metros de via estão naquele nível. Nível de severidade: 0/1 = livre, 2 = moderado, 3-4 = intenso, 5 = crítico (parado).</p>
+      <div class="table-wrap"><table class="data-table" id="tv-table"></table></div>
+    </div>
+  </section>
+</div>
+
+<div id="tooltip"></div>
+<div id="update-toast" class="update-toast hidden" role="status">
+  <div class="toast-title">Atualização</div>
+  <div class="toast-body" id="update-toast-body"></div>
+</div>
+
+<script id="data-json" type="application/json">__DATA_JSON__</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+(function () {
+  "use strict";
+  const svgNS = "http://www.w3.org/2000/svg";
+  const DATA = JSON.parse(document.getElementById("data-json").textContent);
+
+  // ---------- título animado ----------
+  function renderHeroTitle() {
+    const el = document.getElementById("hero-title");
+    el.textContent = "";
+    const parts = [
+      ["Painel", false], ["de", false], ["Tráfego", false], ["em", false], ["Tempo", false], ["Real", false],
+      ["—", true], ["Waze", true], ["Data", true], ["Feed", true]
+    ];
+    parts.forEach(([word, dim], i) => {
+      const span = document.createElement("span");
+      span.className = "word" + (dim ? " dim" : "");
+      span.textContent = word;
+      span.style.animationDelay = (i * 0.07) + "s";
+      el.appendChild(span);
+      el.appendChild(document.createTextNode(" "));
+    });
+  }
+
+  const fmtNum = n => Number(n || 0).toLocaleString("pt-BR");
+  const fmtTime = iso => {
+    if (!iso) return "";
+    let s = iso.replace(" ", "T");
+    // pubDateUtc/collected_at vem em UTC mas sem "Z" (PowerShell ToString("s")) — sem isso,
+    // o navegador interpreta como hora local e o horário aparece ~3h "no futuro" (fuso de Brasília).
+    if (!/[Zz]|[+-]\d\d:\d\d$/.test(s)) s += "Z";
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  };
+
+  const statusHex = { good: "var(--good)", warning: "var(--warning)", serious: "var(--serious)", critical: "var(--critical)" };
+  const statusLabel = { good: "Livre", warning: "Atenção", serious: "Sério", critical: "Crítico" };
+
+  // ---------- rotulos amigaveis (tipo de ocorrencia / fluxo) ----------
+  function friendlyOccurrenceLabel(type, subtype) {
+    if (type === "HAZARD" && subtype === "HAZARD_ON_ROAD_POT_HOLE") return "TAPA BURACO";
+    if (type === "HAZARD") return "PERIGO NA VIA";
+    if (type === "ROAD_CLOSED") return "VIA FECHADA";
+    if (type === "ACCIDENT") return "ACIDENTE";
+    if (type === "WEATHERHAZARD") return "ALERTA CLIMÁTICO";
+    return type || "OCORRÊNCIA";
+  }
+  function flowLabelForSeverity(key) {
+    return { warning: "FLUXO LENTO", serious: "FLUXO INTENSO", critical: "TRÂNSITO PARADO" }[key] || null;
+  }
+
+  // ---------- tooltip ----------
+  const tooltipEl = document.getElementById("tooltip");
+  function hideTooltip() { tooltipEl.style.display = "none"; }
+  function positionTooltip(evt) {
+    const pad = 14;
+    let x = evt.clientX + pad, y = evt.clientY + pad;
+    if (x + 220 > window.innerWidth) x = evt.clientX - 220 - pad;
+    if (y + 80 > window.innerHeight) y = evt.clientY - 80 - pad;
+    tooltipEl.style.left = x + "px";
+    tooltipEl.style.top = y + "px";
+  }
+  function showTooltip(evt, title, value) {
+    tooltipEl.textContent = "";
+    const t = document.createElement("div");
+    t.textContent = title;
+    const v = document.createElement("div");
+    v.className = "t-value";
+    v.textContent = value;
+    tooltipEl.appendChild(t);
+    tooltipEl.appendChild(v);
+    tooltipEl.style.display = "block";
+    positionTooltip(evt);
+  }
+  function showMultiTooltip(evt, title, rows) {
+    tooltipEl.textContent = "";
+    const t = document.createElement("div");
+    t.className = "t-value";
+    t.textContent = title;
+    tooltipEl.appendChild(t);
+    rows.forEach(([label, value]) => {
+      const row = document.createElement("div");
+      row.className = "t-row";
+      const l = document.createElement("span");
+      l.textContent = label;
+      const v = document.createElement("span");
+      v.className = "t-value";
+      v.textContent = value;
+      row.appendChild(l);
+      row.appendChild(v);
+      tooltipEl.appendChild(row);
+    });
+    tooltipEl.style.display = "block";
+    positionTooltip(evt);
+  }
+
+  // ---------- horizontal bar chart ----------
+  function renderBarChart(containerId, items, opts) {
+    opts = opts || {};
+    const root = document.getElementById(containerId);
+    root.textContent = "";
+    if (!items || !items.length) {
+      const p = document.createElement("div"); p.className = "empty-msg"; p.textContent = "Sem dados ainda.";
+      root.appendChild(p); return;
+    }
+    const max = Math.max.apply(null, items.map(i => i.value).concat([1]));
+    const rowH = 26, gap = 8, leftW = 150, chartW = 380, barMaxW = chartW - 60;
+    const svgH = items.length * (rowH + gap);
+    const svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("viewBox", "0 0 " + (leftW + chartW) + " " + svgH);
+    svg.setAttribute("width", "100%");
+    svg.setAttribute("height", svgH);
+    svg.setAttribute("role", "img");
+
+    const baseline = document.createElementNS(svgNS, "line");
+    baseline.setAttribute("x1", leftW); baseline.setAttribute("x2", leftW);
+    baseline.setAttribute("y1", 0); baseline.setAttribute("y2", svgH);
+    baseline.setAttribute("class", "gridline");
+    svg.appendChild(baseline);
+
+    items.forEach((item, idx) => {
+      const y = idx * (rowH + gap);
+      const barW = Math.max((item.value / max) * barMaxW, 2);
+
+      const label = document.createElementNS(svgNS, "text");
+      label.setAttribute("x", leftW - 8);
+      label.setAttribute("y", y + rowH / 2 + 4);
+      label.setAttribute("text-anchor", "end");
+      label.setAttribute("class", "axis-label");
+      label.textContent = item.label || "(sem nome)";
+      svg.appendChild(label);
+
+      const g = document.createElementNS(svgNS, "g");
+      g.setAttribute("tabindex", "0");
+      g.setAttribute("class", "bar-hit");
+
+      const rect = document.createElementNS(svgNS, "rect");
+      rect.setAttribute("x", leftW + 2);
+      rect.setAttribute("y", y + 3);
+      rect.setAttribute("width", barW);
+      rect.setAttribute("height", rowH - 6);
+      rect.setAttribute("rx", 4);
+      rect.setAttribute("fill", opts.color || "var(--series-1)");
+      g.appendChild(rect);
+
+      const hit = document.createElementNS(svgNS, "rect");
+      hit.setAttribute("x", leftW);
+      hit.setAttribute("y", y);
+      hit.setAttribute("width", chartW);
+      hit.setAttribute("height", rowH + gap);
+      hit.setAttribute("fill", "transparent");
+      g.appendChild(hit);
+
+      const val = document.createElementNS(svgNS, "text");
+      val.setAttribute("x", leftW + 2 + barW + 6);
+      val.setAttribute("y", y + rowH / 2 + 4);
+      val.setAttribute("class", "value-label");
+      val.textContent = fmtNum(item.value);
+      svg.appendChild(val);
+
+      const onMove = evt => showTooltip(evt, item.label || "(sem nome)", fmtNum(item.value));
+      g.addEventListener("pointerenter", () => rect.classList.add("hovered"));
+      g.addEventListener("pointermove", onMove);
+      g.addEventListener("pointerleave", () => { rect.classList.remove("hovered"); hideTooltip(); });
+      g.addEventListener("focus", onMove);
+      g.addEventListener("blur", hideTooltip);
+      if (opts.onClick) {
+        g.style.cursor = "pointer";
+        g.addEventListener("click", () => opts.onClick(item));
+        g.addEventListener("keydown", evt => { if (evt.key === "Enter" || evt.key === " ") { evt.preventDefault(); opts.onClick(item); } });
+      }
+
+      svg.appendChild(g);
+    });
+
+    root.appendChild(svg);
+  }
+
+  // ---------- severity meter (status colors) ----------
+  function renderSeverityMeter(containerId, legendId, sev) {
+    const root = document.getElementById(containerId);
+    root.textContent = "";
+    const order = [["good", "Livre / leve"], ["warning", "Atenção"], ["serious", "Sério"], ["critical", "Crítico"]];
+    const total = order.reduce((s, [k]) => s + (sev[k] || 0), 0);
+    const W = 640, H = 48;
+    const svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    svg.setAttribute("width", "100%"); svg.setAttribute("height", H);
+    svg.setAttribute("role", "img");
+
+    if (total === 0) {
+      const p = document.createElement("div"); p.className = "empty-msg"; p.textContent = "Nenhum congestionamento ativo no momento.";
+      root.appendChild(p); return;
+    }
+
+    let x = 0;
+    const gap = 2;
+    order.forEach(([key, label]) => {
+      const val = sev[key] || 0;
+      if (val <= 0) return;
+      const w = Math.max((val / total) * W - gap, 1);
+      const g = document.createElementNS(svgNS, "g");
+      g.setAttribute("tabindex", "0");
+      const rect = document.createElementNS(svgNS, "rect");
+      rect.setAttribute("x", x); rect.setAttribute("y", 4);
+      rect.setAttribute("width", w); rect.setAttribute("height", H - 8);
+      rect.setAttribute("rx", 4);
+      rect.setAttribute("fill", statusHex[key]);
+      g.appendChild(rect);
+      const onMove = evt => showTooltip(evt, label, fmtNum(val) + " de " + fmtNum(total));
+      g.addEventListener("pointerenter", () => rect.classList.add("hovered"));
+      g.addEventListener("pointermove", onMove);
+      g.addEventListener("pointerleave", () => { rect.classList.remove("hovered"); hideTooltip(); });
+      g.addEventListener("focus", onMove);
+      g.addEventListener("blur", hideTooltip);
+      svg.appendChild(g);
+      x += w + gap;
+    });
+    root.appendChild(svg);
+
+    const legendRoot = document.getElementById(legendId);
+    legendRoot.textContent = "";
+    order.forEach(([key, label]) => {
+      if (!(sev[key] > 0)) return;
+      const item = document.createElement("div"); item.className = "legend-item";
+      const sw = document.createElement("span"); sw.className = "legend-swatch"; sw.style.background = statusHex[key];
+      const txt = document.createElement("span"); txt.textContent = label + " (" + sev[key] + ")";
+      item.appendChild(sw); item.appendChild(txt);
+      legendRoot.appendChild(item);
+    });
+  }
+
+  // ---------- stacked area over time ----------
+  function renderStackedArea(containerId, legendId, timestamps, seriesByLevel, levels, colorFn, labelFn) {
+    const root = document.getElementById(containerId);
+    const legendRoot = document.getElementById(legendId);
+    root.textContent = ""; legendRoot.textContent = "";
+
+    if (!timestamps || timestamps.length < 2) {
+      const p = document.createElement("div"); p.className = "empty-msg";
+      p.textContent = "Aguardando mais coletas para exibir a série temporal (o painel é atualizado automaticamente a cada 5 min).";
+      root.appendChild(p);
+      return;
+    }
+
+    const W = 760, H = 260, padL = 50, padR = 16, padT = 12, padB = 24;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+    const n = timestamps.length;
+
+    const stacks = timestamps.map((_, i) => {
+      let cum = 0;
+      return levels.map(l => { const v = (seriesByLevel[l][i]) || 0; const y0 = cum; cum += v; return [y0, cum]; });
+    });
+    const maxY = Math.max.apply(null, stacks.map(s => s[s.length - 1][1]).concat([1]));
+
+    const xAt = i => padL + (n === 1 ? 0 : (i / (n - 1)) * plotW);
+    const yAt = v => padT + plotH - (v / maxY) * plotH;
+
+    const svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    svg.setAttribute("width", "100%"); svg.setAttribute("height", H);
+    svg.setAttribute("role", "img");
+
+    const ticks = 4;
+    for (let t = 0; t <= ticks; t++) {
+      const v = maxY * t / ticks;
+      const y = yAt(v);
+      const gl = document.createElementNS(svgNS, "line");
+      gl.setAttribute("x1", padL); gl.setAttribute("x2", W - padR);
+      gl.setAttribute("y1", y); gl.setAttribute("y2", y);
+      gl.setAttribute("class", "gridline");
+      svg.appendChild(gl);
+      const lbl = document.createElementNS(svgNS, "text");
+      lbl.setAttribute("x", padL - 8); lbl.setAttribute("y", y + 3);
+      lbl.setAttribute("text-anchor", "end"); lbl.setAttribute("class", "axis-label small");
+      lbl.textContent = fmtNum(Math.round(v));
+      svg.appendChild(lbl);
+    }
+
+    levels.forEach((l, li) => {
+      const top = [], bottom = [];
+      for (let i = 0; i < n; i++) {
+        const [y0, y1] = stacks[i][li];
+        top.push([xAt(i), yAt(y1)]);
+        bottom.push([xAt(i), yAt(y0)]);
+      }
+      let d = "M" + top.map(p => p.join(",")).join(" L");
+      d += " L" + bottom.slice().reverse().map(p => p.join(",")).join(" L") + " Z";
+      const path = document.createElementNS(svgNS, "path");
+      path.setAttribute("d", d);
+      path.setAttribute("fill", colorFn(l));
+      path.setAttribute("stroke", "var(--surface-1)");
+      path.setAttribute("stroke-width", "1");
+      svg.appendChild(path);
+    });
+
+    const xTickIdx = [0, Math.floor((n - 1) / 2), n - 1];
+    xTickIdx.forEach(i => {
+      const lbl = document.createElementNS(svgNS, "text");
+      lbl.setAttribute("x", xAt(i));
+      lbl.setAttribute("y", H - 6);
+      lbl.setAttribute("text-anchor", i === 0 ? "start" : (i === n - 1 ? "end" : "middle"));
+      lbl.setAttribute("class", "axis-label small");
+      lbl.textContent = fmtTime(timestamps[i]);
+      svg.appendChild(lbl);
+    });
+
+    const crosshair = document.createElementNS(svgNS, "line");
+    crosshair.setAttribute("y1", padT); crosshair.setAttribute("y2", H - padB);
+    crosshair.setAttribute("class", "crosshair");
+    crosshair.setAttribute("visibility", "hidden");
+    svg.appendChild(crosshair);
+
+    const overlay = document.createElementNS(svgNS, "rect");
+    overlay.setAttribute("x", padL); overlay.setAttribute("y", padT);
+    overlay.setAttribute("width", plotW); overlay.setAttribute("height", plotH);
+    overlay.setAttribute("fill", "transparent");
+    overlay.setAttribute("tabindex", "0");
+    overlay.addEventListener("pointermove", evt => {
+      const rect = svg.getBoundingClientRect();
+      const scaleX = W / rect.width;
+      const localX = (evt.clientX - rect.left) * scaleX;
+      let idx = Math.round(((localX - padL) / plotW) * (n - 1));
+      idx = Math.max(0, Math.min(n - 1, idx));
+      crosshair.setAttribute("x1", xAt(idx)); crosshair.setAttribute("x2", xAt(idx));
+      crosshair.setAttribute("visibility", "visible");
+      const rows = levels.map(l => [labelFn(l), fmtNum(seriesByLevel[l][idx] || 0)]);
+      showMultiTooltip(evt, fmtTime(timestamps[idx]), rows);
+    });
+    overlay.addEventListener("pointerleave", () => { crosshair.setAttribute("visibility", "hidden"); hideTooltip(); });
+    svg.appendChild(overlay);
+
+    root.appendChild(svg);
+
+    levels.forEach(l => {
+      const item = document.createElement("div"); item.className = "legend-item";
+      const sw = document.createElement("span"); sw.className = "legend-swatch"; sw.style.background = colorFn(l);
+      const txt = document.createElement("span"); txt.textContent = labelFn(l);
+      item.appendChild(sw); item.appendChild(txt);
+      document.getElementById(legendId).appendChild(item);
+    });
+  }
+
+  // ---------- table ----------
+  function renderTable() {
+    const table = document.getElementById("tv-table");
+    table.textContent = "";
+    const cols = [
+      ["t", "Coleta"],
+      ["u0", "Motoristas — via livre (nv.0)"], ["u1", "Motoristas — trânsito leve (nv.1)"],
+      ["u2", "Motoristas — moderado (nv.2)"], ["u3", "Motoristas — intenso (nv.3)"], ["u4", "Motoristas — crítico (nv.4)"],
+      ["l1", "Extensão leve, m (nv.1)"], ["l2", "Extensão moderada, m (nv.2)"], ["l3", "Extensão intensa, m (nv.3)"],
+      ["l4", "Extensão muito intensa, m (nv.4)"], ["l5", "Extensão crítica/parada, m (nv.5)"]
+    ];
+    const thead = document.createElement("thead");
+    const trh = document.createElement("tr");
+    cols.forEach(([, label]) => { const th = document.createElement("th"); th.textContent = label; trh.appendChild(th); });
+    thead.appendChild(trh);
+    table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    (DATA.tvTable || []).slice().reverse().forEach(row => {
+      const tr = document.createElement("tr");
+      cols.forEach(([key]) => {
+        const td = document.createElement("td");
+        td.textContent = key === "t" ? fmtTime(row[key]) : fmtNum(row[key]);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+  }
+
+  // ---------- dados brutos + recalculo por periodo selecionado ----------
+  function parseLocal(t) {
+    if (!t) return NaN;
+    const d = new Date(t.replace(" ", "T"));
+    return d.getTime();
+  }
+  const RAW = {
+    alerts: (DATA.rawAlerts || []).map(a => Object.assign({}, a, { tMs: parseLocal(a.t) })),
+    jams: (DATA.rawJams || []).map(j => Object.assign({}, j, { tMs: parseLocal(j.t) }))
+  };
+
+  function bucketSeverity(rows) {
+    let good = 0, warning = 0, serious = 0, critical = 0;
+    rows.forEach(r => {
+      const l = r.level || 0;
+      if (l <= 1) good++; else if (l === 2) warning++; else if (l <= 4) serious++; else critical++;
+    });
+    return { good, warning, serious, critical };
+  }
+  function dedupHazards(alertsArr) {
+    const byUuid = new Map();
+    alertsArr.forEach(a => {
+      if (a.lat == null || a.lon == null || !a.uuid) return;
+      const prev = byUuid.get(a.uuid);
+      if (!prev || a.tMs > prev.tMs) byUuid.set(a.uuid, a);
+    });
+    return Array.from(byUuid.values());
+  }
+  function computeAlertsByType(alertsArr) {
+    const dedup = dedupHazards(alertsArr);
+    const counts = new Map();
+    dedup.forEach(a => counts.set(a.type, (counts.get(a.type) || 0) + 1));
+    return Array.from(counts.entries()).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+  }
+  function computeTopStreets(jamsArr) {
+    const groups = new Map();
+    jamsArr.forEach(j => {
+      if (!j.street) return;
+      if (!groups.has(j.street)) groups.set(j.street, []);
+      groups.get(j.street).push(j);
+    });
+    const arr = Array.from(groups.entries()).map(([street, rows]) => ({
+      label: street, value: rows.length,
+      rows: rows.slice().sort((a, b) => b.tMs - a.tMs).slice(0, 30)
+    }));
+    arr.sort((a, b) => b.value - a.value);
+    return arr.slice(0, 10);
+  }
+  function computeCriticalPoints(jamsArr) {
+    const groups = new Map();
+    jamsArr.forEach(j => {
+      if (j.lat == null || j.lon == null) return;
+      const key = j.lat.toFixed(4) + "|" + j.lon.toFixed(4) + "|" + (j.street || "");
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(j);
+    });
+    let arr = Array.from(groups.values()).map(rows => {
+      const levels = rows.map(r => r.level || 0);
+      const avgLevel = levels.reduce((a, b) => a + b, 0) / levels.length;
+      const maxLevel = Math.max.apply(null, levels);
+      let sevKey = "good";
+      if (maxLevel >= 5) sevKey = "critical"; else if (maxLevel >= 3) sevKey = "serious"; else if (maxLevel >= 2) sevKey = "warning";
+      const last = rows.slice().sort((a, b) => b.tMs - a.tMs)[0];
+      const avgLat = rows.reduce((s, r) => s + r.lat, 0) / rows.length;
+      const avgLon = rows.reduce((s, r) => s + r.lon, 0) / rows.length;
+      const speeds = rows.map(r => r.speedKMH).filter(v => v != null);
+      const avgSpeed = speeds.length ? speeds.reduce((a, b) => a + b, 0) / speeds.length : 0;
+      return {
+        lat: avgLat, lon: avgLon, street: last.street, occurrences: rows.length,
+        avgLevel: Math.round(avgLevel * 10) / 10, maxLevel, severityLabel: sevKey,
+        lastSeen: last.t, avgSpeedKMH: Math.round(avgSpeed * 10) / 10
+      };
+    });
+    arr.sort((a, b) => b.occurrences - a.occurrences);
+    return arr.slice(0, 20);
+  }
+
+  // Monta a "visão" (KPIs, graficos, mapa) para um periodo. range=null => modo ao vivo (igual antes).
+  function buildView(range) {
+    let alertsSlice, jamsSlice, histJams, histAlertsForSearch, isLive;
+    if (!range) {
+      isLive = true;
+      const maxAT = RAW.alerts.reduce((m, a) => Math.max(m, a.tMs || 0), 0);
+      const maxJT = RAW.jams.reduce((m, j) => Math.max(m, j.tMs || 0), 0);
+      alertsSlice = RAW.alerts.filter(a => a.tMs === maxAT);
+      jamsSlice = RAW.jams.filter(j => j.tMs === maxJT);
+      histJams = RAW.jams;
+      histAlertsForSearch = RAW.alerts;
+    } else {
+      isLive = false;
+      alertsSlice = RAW.alerts.filter(a => a.tMs >= range.start && a.tMs <= range.end);
+      jamsSlice = RAW.jams.filter(j => j.tMs >= range.start && j.tMs <= range.end);
+      histJams = jamsSlice;
+      histAlertsForSearch = alertsSlice;
+    }
+    const sev = bucketSeverity(jamsSlice);
+    let severityLabel = "good";
+    if (sev.critical > 0) severityLabel = "critical"; else if (sev.serious > 0) severityLabel = "serious"; else if (sev.warning > 0) severityLabel = "warning";
+    const hazardPoints = dedupHazards(alertsSlice);
+    const distinctJamIds = new Set(jamsSlice.map(j => j.id)).size;
+
+    // fatia a serie temporal (traffic view) pelo mesmo periodo
+    const allTs = DATA.timeSeries.timestamps || [];
+    let idxStart = 0, idxEnd = allTs.length - 1;
+    if (range) {
+      idxStart = allTs.findIndex(t => parseLocal(t) >= range.start);
+      if (idxStart === -1) idxStart = allTs.length;
+      idxEnd = idxStart;
+      for (let i = idxStart; i < allTs.length; i++) { if (parseLocal(allTs[i]) <= range.end) idxEnd = i; else break; }
+    }
+    const tsSlice = allTs.slice(idxStart, idxEnd + 1);
+    const sliceLevels = (byLevel) => {
+      const out = {};
+      Object.keys(byLevel).forEach(l => { out[l] = byLevel[l].slice(idxStart, idxEnd + 1); });
+      return out;
+    };
+
+    return {
+      isLive,
+      range,
+      totals: {
+        activeAlerts: hazardPoints.length,
+        activeJams: distinctJamIds,
+        usersInJamsNow: isLive ? DATA.totals.usersInJamsNow : null,
+        severityLabel
+      },
+      alertsByType: computeAlertsByType(alertsSlice),
+      topStreetsFull: computeTopStreets(histJams),
+      severity: sev,
+      criticalPoints: computeCriticalPoints(histJams),
+      hazardPoints: hazardPoints,
+      allHazardsForSearch: dedupHazards(histAlertsForSearch),
+      timeSeries: { timestamps: tsSlice, usersByLevel: sliceLevels(DATA.timeSeries.usersByLevel), lengthByLevel: sliceLevels(DATA.timeSeries.lengthByLevel) }
+    };
+  }
+
+  // ---------- mapa de pontos críticos (Leaflet + OpenStreetMap) ----------
+  const geocodeCache = new Map();
+  function reverseGeocode(lat, lon, onDone) {
+    const key = lat.toFixed(4) + "," + lon.toFixed(4);
+    if (geocodeCache.has(key)) { onDone(geocodeCache.get(key)); return; }
+    if (typeof fetch !== "function") { onDone(null); return; }
+    fetch("https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=" + lat + "&lon=" + lon + "&zoom=17&addressdetails=1")
+      .then(r => r.ok ? r.json() : null)
+      .then(j => {
+        if (!j) { onDone(null); return; }
+        const a = j.address || {};
+        const region = a.suburb || a.neighbourhood || a.quarter || a.city_district || a.village || a.town || "";
+        const text = [region, a.city || a.town].filter(Boolean).join(", ");
+        geocodeCache.set(key, text || null);
+        onDone(text || null);
+      })
+      .catch(() => onDone(null));
+  }
+
+  function severityColorVar(key) {
+    return { good: "var(--good)", warning: "var(--warning)", serious: "var(--serious)", critical: "var(--critical)" }[key] || "var(--good)";
+  }
+  function resolvedVar(name, fallback) {
+    const root = document.querySelector(".viz-root");
+    const v = getComputedStyle(root).getPropertyValue(name).trim();
+    return v || fallback;
+  }
+
+  let mapInstance = null;
+  function initMap(view) {
+    const mapInfo = document.getElementById("map-info");
+    const points = view.criticalPoints || [];
+    const hazards = view.hazardPoints || [];
+    if (mapInstance) { mapInstance.remove(); mapInstance = null; }
+    document.getElementById("map").innerHTML = "";
+
+    if (!points.length && !hazards.length) {
+      const p = document.createElement("div"); p.className = "empty-msg";
+      p.textContent = "Nenhuma ocorrência com coordenadas neste período.";
+      document.getElementById("map").appendChild(p);
+      return;
+    }
+
+    const allLats = points.map(p => p.lat).concat(hazards.map(p => p.lat));
+    const allLons = points.map(p => p.lon).concat(hazards.map(p => p.lon));
+    const centerLat = allLats.length ? allLats.reduce((a, b) => a + b, 0) / allLats.length : -10.2;
+    const centerLon = allLons.length ? allLons.reduce((a, b) => a + b, 0) / allLons.length : -48.32;
+
+    const map = L.map("map", { scrollWheelZoom: true }).setView([centerLat, centerLon], 12);
+    mapInstance = map;
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    const bounds = [];
+
+    points.forEach(pt => {
+      const radius = 6 + Math.min(pt.occurrences, 40) * 0.35;
+      const flowLabel = flowLabelForSeverity(pt.severityLabel);
+      const pulseClass = flowLabel ? ("jam-pulse jam-pulse-" + pt.severityLabel) : "";
+      const marker = L.circleMarker([pt.lat, pt.lon], {
+        radius: radius,
+        color: "var(--surface-1)",
+        weight: 2,
+        fillColor: resolvedVar("--" + pt.severityLabel, "#d03b3b"),
+        fillOpacity: 0.85,
+        className: pulseClass
+      }).addTo(map);
+      bounds.push([pt.lat, pt.lon]);
+
+      if (flowLabel) {
+        marker.bindTooltip(flowLabel, { permanent: true, direction: "top", offset: [0, -radius], className: "flow-label" });
+      }
+
+      const popup = document.createElement("div");
+      const title = document.createElement("div"); title.className = "popup-title";
+      title.textContent = (flowLabel ? flowLabel + " — " : "") + (pt.street || "Via sem nome");
+      popup.appendChild(title);
+      const rows = [
+        ["Ocorrências registradas", pt.occurrences],
+        ["Nível médio", pt.avgLevel + " / 5"],
+        ["Nível máximo já visto", pt.maxLevel + " / 5"],
+        ["Velocidade média", pt.avgSpeedKMH + " km/h"],
+        ["Última vez visto", fmtTime(pt.lastSeen)],
+        ["Coordenadas", pt.lat.toFixed(5) + ", " + pt.lon.toFixed(5)]
+      ];
+      rows.forEach(([label, value]) => {
+        const row = document.createElement("div"); row.className = "popup-row";
+        const l = document.createElement("span"); l.textContent = label;
+        const v = document.createElement("b"); v.textContent = value;
+        row.appendChild(l); row.appendChild(v);
+        popup.appendChild(row);
+      });
+      const regionEl = document.createElement("div"); regionEl.className = "popup-region";
+      regionEl.textContent = "Localizando região exata…";
+      popup.appendChild(regionEl);
+
+      marker.bindPopup(popup, { maxWidth: 260 });
+      marker.on("click", () => {
+        map.flyTo([pt.lat, pt.lon], 17, { duration: 1.1 });
+        mapInfo.innerHTML = "";
+        const strong = document.createElement("strong"); strong.textContent = pt.street || "Via sem nome";
+        mapInfo.appendChild(document.createTextNode("Ponto selecionado: "));
+        mapInfo.appendChild(strong);
+        reverseGeocode(pt.lat, pt.lon, region => {
+          regionEl.textContent = region ? ("Região: " + region) : "Região não identificada.";
+          if (region) {
+            mapInfo.appendChild(document.createTextNode(" — região: "));
+            const em = document.createElement("em"); em.textContent = region;
+            mapInfo.appendChild(em);
+          }
+        });
+      });
+    });
+
+    hazards.forEach(hz => {
+      const label = friendlyOccurrenceLabel(hz.type, hz.subtype);
+      const marker = L.circleMarker([hz.lat, hz.lon], {
+        radius: 5, color: "var(--surface-1)", weight: 1.5,
+        fillColor: "#eb6834", fillOpacity: 0.9
+      }).addTo(map);
+      bounds.push([hz.lat, hz.lon]);
+      marker.bindTooltip(label, { permanent: true, direction: "right", offset: [6, 0], className: "hazard-label" });
+
+      const popup = document.createElement("div");
+      const title = document.createElement("div"); title.className = "popup-title";
+      title.textContent = label;
+      popup.appendChild(title);
+      const row = document.createElement("div"); row.className = "popup-row";
+      const l = document.createElement("span"); l.textContent = hz.street || "Via sem nome";
+      row.appendChild(l);
+      popup.appendChild(row);
+      if (hz.pubDateUtc) {
+        const row2 = document.createElement("div"); row2.className = "popup-row";
+        const l2 = document.createElement("span"); l2.textContent = "Registrado em";
+        const v2 = document.createElement("b"); v2.textContent = fmtTime(hz.pubDateUtc);
+        row2.appendChild(l2); row2.appendChild(v2);
+        popup.appendChild(row2);
+      }
+      marker.bindPopup(popup, { maxWidth: 220 });
+      marker.on("click", () => map.flyTo([hz.lat, hz.lon], 18, { duration: 1.1 }));
+    });
+
+    if (bounds.length > 1) map.fitBounds(bounds, { padding: [30, 30] });
+
+    const legendRoot = document.getElementById("legend-map");
+    legendRoot.textContent = "";
+    [["good", "Livre / leve"], ["warning", "Atenção — FLUXO LENTO"], ["serious", "Sério — FLUXO INTENSO"], ["critical", "Crítico — TRÂNSITO PARADO"], ["hazard", "Alerta (TAPA BURACO / VIA FECHADA)"]].forEach(([key, label]) => {
+      const item = document.createElement("div"); item.className = "legend-item";
+      const sw = document.createElement("span"); sw.className = "legend-swatch"; sw.style.borderRadius = "50%";
+      sw.style.background = key === "hazard" ? "#eb6834" : severityColorVar(key);
+      const txt = document.createElement("span"); txt.textContent = label;
+      item.appendChild(sw); item.appendChild(txt);
+      legendRoot.appendChild(item);
+    });
+  }
+
+  // ---------- ordinal ramps (CSS vars resolve per light/dark automatically) ----------
+  const usersRamp = { "0": "var(--sev-0)", "1": "var(--sev-1)", "2": "var(--sev-2)", "3": "var(--sev-3)", "4": "var(--sev-4)" };
+  const lengthRamp = { "1": "var(--len-1)", "2": "var(--len-2)", "3": "var(--len-3)", "4": "var(--len-4)", "5": "var(--len-5)" };
+
+  // ---------- detalhe de ocorrencias ao clicar numa via ----------
+  function renderStreetDetail(item) {
+    const root = document.getElementById("street-detail");
+    root.textContent = "";
+    if (!item) return;
+    const title = document.createElement("div");
+    title.innerHTML = "";
+    title.style.fontWeight = "700"; title.style.marginBottom = "6px";
+    title.textContent = "Ocorrências em: " + item.label + " (mostrando até 30 mais recentes)";
+    root.appendChild(title);
+    const table = document.createElement("table"); table.className = "data-table";
+    const thead = document.createElement("thead");
+    const trh = document.createElement("tr");
+    ["Quando", "Nível", "Velocidade (km/h)", "Coordenadas"].forEach(h => { const th = document.createElement("th"); th.textContent = h; trh.appendChild(th); });
+    thead.appendChild(trh); table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    item.rows.forEach(r => {
+      const tr = document.createElement("tr");
+      const c1 = document.createElement("td"); c1.textContent = fmtTime(r.t); tr.appendChild(c1);
+      const c2 = document.createElement("td"); c2.textContent = (r.level != null ? r.level : "") + " / 5"; tr.appendChild(c2);
+      const c3 = document.createElement("td"); c3.textContent = r.speedKMH != null ? fmtNum(r.speedKMH) : "—"; tr.appendChild(c3);
+      const c4 = document.createElement("td"); c4.textContent = (r.lat != null && r.lon != null) ? (r.lat.toFixed(5) + ", " + r.lon.toFixed(5)) : "—"; tr.appendChild(c4);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    root.appendChild(table);
+  }
+
+  // ---------- busca por tipo de ocorrencia ----------
+  function renderOccurrenceTypeSearch(view) {
+    const select = document.getElementById("tipo-ocorrencia-select");
+    const table = document.getElementById("tipo-ocorrencia-table");
+    const items = view.allHazardsForSearch || [];
+    const types = new Map();
+    items.forEach(a => {
+      const key = a.type + "|" + (a.subtype || "");
+      if (!types.has(key)) types.set(key, { type: a.type, subtype: a.subtype, label: friendlyOccurrenceLabel(a.type, a.subtype), count: 0 });
+      types.get(key).count++;
+    });
+    const typeList = Array.from(types.values()).sort((a, b) => b.count - a.count);
+
+    const prevValue = select.value;
+    select.textContent = "";
+    const optAll = document.createElement("option"); optAll.value = ""; optAll.textContent = "Todos os tipos (" + items.length + ")";
+    select.appendChild(optAll);
+    typeList.forEach(t => {
+      const opt = document.createElement("option");
+      opt.value = t.type + "|" + (t.subtype || "");
+      opt.textContent = t.label + " (" + t.count + ")";
+      select.appendChild(opt);
+    });
+    if (typeList.some(t => (t.type + "|" + (t.subtype || "")) === prevValue)) select.value = prevValue;
+
+    function renderRows() {
+      const filterKey = select.value;
+      const rows = filterKey ? items.filter(a => (a.type + "|" + (a.subtype || "")) === filterKey) : items;
+      table.textContent = "";
+      const thead = document.createElement("thead");
+      const trh = document.createElement("tr");
+      ["Tipo", "Via", "Coordenadas", "Registrado em"].forEach(h => { const th = document.createElement("th"); th.textContent = h; trh.appendChild(th); });
+      thead.appendChild(trh); table.appendChild(thead);
+      const tbody = document.createElement("tbody");
+      if (!rows.length) {
+        const tr = document.createElement("tr"); const td = document.createElement("td");
+        td.colSpan = 4; td.className = "empty-msg"; td.textContent = "Nenhuma ocorrência encontrada.";
+        tr.appendChild(td); tbody.appendChild(tr);
+      } else {
+        rows.slice().sort((a, b) => b.tMs - a.tMs).slice(0, 100).forEach(a => {
+          const tr = document.createElement("tr");
+          const c1 = document.createElement("td"); c1.textContent = friendlyOccurrenceLabel(a.type, a.subtype); c1.style.textAlign = "left"; tr.appendChild(c1);
+          const c2 = document.createElement("td"); c2.textContent = a.street || "—"; c2.style.textAlign = "left"; tr.appendChild(c2);
+          const c3 = document.createElement("td"); c3.textContent = a.lat.toFixed(5) + ", " + a.lon.toFixed(5); tr.appendChild(c3);
+          const c4 = document.createElement("td"); c4.textContent = fmtTime(a.pubDateUtc || a.t); tr.appendChild(c4);
+          tbody.appendChild(tr);
+        });
+      }
+      table.appendChild(tbody);
+    }
+    select.onchange = renderRows;
+    renderRows();
+  }
+
+  // ---------- aviso de atualizacao ao abrir a pagina ----------
+  function showUpdateToast() {
+    const report = DATA.latestReport;
+    if (!report) return;
+    const toast = document.getElementById("update-toast");
+    const body = document.getElementById("update-toast-body");
+    body.textContent = "";
+    const label = friendlyOccurrenceLabel(report.type, report.subtype);
+    const texto = "Enviado pedido de " + label.toLowerCase() + " recentemente" +
+      (report.street ? (" — " + report.street) : "") + ", registrado em " + fmtTime(report.pubDateUtc) + ".";
+    body.textContent = texto;
+    toast.classList.remove("hidden");
+    requestAnimationFrame(() => toast.classList.add("show"));
+    setTimeout(() => {
+      toast.classList.remove("show");
+      setTimeout(() => toast.classList.add("hidden"), 400);
+    }, 10000);
+  }
+
+  // ---------- orquestrador: recalcula tudo pro periodo selecionado ----------
+  function renderView(view) {
+    document.getElementById("titulo-chart-alerts").textContent = view.isLive ? "Alertas ativos por tipo (snapshot atual)" : "Alertas por tipo (no período selecionado)";
+    document.getElementById("titulo-chart-streets").textContent = view.isLive ? "Vias com mais ocorrências de congestionamento (histórico acumulado)" : "Vias com mais ocorrências de congestionamento (no período selecionado)";
+
+    const kpiLabels = view.isLive
+      ? { alerts: "Alertas ativos", jams: "Congestionamentos ativos", sev: "Severidade atual" }
+      : { alerts: "Alertas no período", jams: "Congestionamentos no período", sev: "Pior severidade no período" };
+
+    const root = document.getElementById("kpi-row");
+    root.textContent = "";
+    const tiles = [
+      { label: kpiLabels.alerts, value: fmtNum(view.totals.activeAlerts) },
+      { label: kpiLabels.jams, value: fmtNum(view.totals.activeJams) },
+    ];
+    if (view.isLive) tiles.push({ label: "Usuários em vias congestionadas agora", value: fmtNum(view.totals.usersInJamsNow) });
+    tiles.forEach(t => {
+      const tile = document.createElement("div"); tile.className = "stat-tile";
+      const l = document.createElement("div"); l.className = "label"; l.textContent = t.label;
+      const v = document.createElement("div"); v.className = "value"; v.textContent = t.value;
+      tile.appendChild(l); tile.appendChild(v);
+      root.appendChild(tile);
+    });
+    const sevTile = document.createElement("div"); sevTile.className = "stat-tile";
+    const sl = document.createElement("div"); sl.className = "label"; sl.textContent = kpiLabels.sev;
+    const badge = document.createElement("div"); badge.className = "badge";
+    const dot = document.createElement("span"); dot.className = "dot";
+    dot.style.background = statusHex[view.totals.severityLabel] || statusHex.good;
+    const txt = document.createElement("span"); txt.textContent = statusLabel[view.totals.severityLabel] || "Livre";
+    badge.appendChild(dot); badge.appendChild(txt);
+    sevTile.appendChild(sl); sevTile.appendChild(badge);
+    root.appendChild(sevTile);
+
+    initMap(view);
+    renderBarChart("chart-alerts", view.alertsByType, { color: "var(--series-1)" });
+    renderBarChart("chart-streets", view.topStreetsFull.map(s => ({ label: s.label, value: s.value })), {
+      color: "var(--series-1)",
+      onClick: item => renderStreetDetail(view.topStreetsFull.find(s => s.label === item.label))
+    });
+    document.getElementById("street-detail").textContent = "";
+    renderSeverityMeter("chart-severity", "legend-severity", view.severity);
+    renderStackedArea("chart-users-time", "legend-users-time", view.timeSeries.timestamps, view.timeSeries.usersByLevel,
+      ["0", "1", "2", "3", "4"], l => usersRamp[l], l => "Nível " + l);
+    renderStackedArea("chart-length-time", "legend-length-time", view.timeSeries.timestamps, view.timeSeries.lengthByLevel,
+      ["1", "2", "3", "4", "5"], l => lengthRamp[l], l => "Nível " + l);
+    renderOccurrenceTypeSearch(view);
+  }
+
+  function ymd(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+
+  function applyFilterFromInputs() {
+    const ini = document.getElementById("filtro-inicio").value;
+    const fim = document.getElementById("filtro-fim").value;
+    let range = null;
+    if (ini && fim) {
+      const start = new Date(ini + "T00:00:00").getTime();
+      const end = new Date(fim + "T23:59:59").getTime();
+      range = { start, end };
+      document.getElementById("period-banner").textContent = "Mostrando: " + ini.split("-").reverse().join("/") + " a " + fim.split("-").reverse().join("/");
+    } else {
+      document.getElementById("period-banner").textContent = "";
+    }
+    document.querySelectorAll("#filter-row .chip-sm").forEach(b => b.classList.remove("is-active"));
+    renderView(buildView(range));
+  }
+
+  function setPreset(days) {
+    const end = new Date();
+    const start = new Date();
+    if (days === "today") { /* start = end = hoje */ }
+    else start.setDate(start.getDate() - (days - 1));
+    document.getElementById("filtro-inicio").value = ymd(start);
+    document.getElementById("filtro-fim").value = ymd(end);
+    applyFilterFromInputs();
+  }
+
+  // ---------- wire up ----------
+  document.getElementById("subtitle").textContent =
+    "🔄 Atualiza automaticamente a cada 5 minutos · última coleta: " + fmtTime(DATA.lastCollection) +
+    " · " + fmtNum(DATA.totals.collections) + " coletas acumuladas · Palmas (TO) · SEMOB";
+
+  renderHeroTitle();
+  renderView(buildView(null));
+  renderTable();
+  showUpdateToast();
+
+  document.getElementById("btn-table").addEventListener("click", () => {
+    document.getElementById("table-card").classList.toggle("hidden");
+  });
+  document.getElementById("btn-theme").addEventListener("click", () => {
+    const root = document.documentElement;
+    const cur = root.getAttribute("data-theme");
+    root.setAttribute("data-theme", cur === "dark" ? "light" : "dark");
+  });
+
+  document.querySelectorAll("#filter-row .chip-sm").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#filter-row .chip-sm").forEach(b => b.classList.remove("is-active"));
+      const preset = btn.getAttribute("data-preset");
+      if (preset === "all") {
+        btn.classList.add("is-active");
+        document.getElementById("filtro-inicio").value = "";
+        document.getElementById("filtro-fim").value = "";
+        document.getElementById("period-banner").textContent = "";
+        renderView(buildView(null));
+      } else if (preset === "today") { btn.classList.add("is-active"); setPreset("today"); }
+      else if (preset === "7d") { btn.classList.add("is-active"); setPreset(7); }
+      else if (preset === "30d") { btn.classList.add("is-active"); setPreset(30); }
+    });
+  });
+  document.getElementById("filtro-inicio").addEventListener("change", applyFilterFromInputs);
+  document.getElementById("filtro-fim").addEventListener("change", applyFilterFromInputs);
+})();
+</script>
+</body>
+</html>
