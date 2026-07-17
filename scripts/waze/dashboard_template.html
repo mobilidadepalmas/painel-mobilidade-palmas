@@ -296,6 +296,11 @@
       <p class="card-desc">"Motoristas" = quantas pessoas o Waze estima que estão dirigindo em vias naquele nível de trânsito nesta coleta. "Extensão" = quantos metros de via estão naquele nível. Nível de severidade: 0/1 = livre, 2 = moderado, 3-4 = intenso, 5 = crítico (parado).</p>
       <div class="table-wrap"><table class="data-table" id="tv-table"></table></div>
     </div>
+    <div class="card wide" id="card-irregularities">
+      <h2>Irregularidades de tráfego (anomalia vs. tempo histórico da rota)</h2>
+      <p class="card-desc">Diferente dos congestionamentos reportados por usuário: o Waze compara o tempo de viagem atual de rotas monitoradas com o tempo histórico normal daquele trecho, e sinaliza quando está muito mais lento que o esperado. Mostra a rota, o atraso extra (tempo atual − tempo normal) e quando foi detectado.</p>
+      <div class="table-wrap"><table class="data-table" id="irregularities-table"></table></div>
+    </div>
   </section>
 </div>
 
@@ -749,6 +754,42 @@
       });
       tbody.appendChild(tr);
     });
+    table.appendChild(tbody);
+  }
+
+  // ---------- irregularidades (anomalia de tempo de viagem vs historico da rota) ----------
+  function renderIrregularitiesTable() {
+    const table = document.getElementById("irregularities-table");
+    if (!table) return;
+    table.textContent = "";
+    const rows = DATA.irregularities || [];
+    const thead = document.createElement("thead");
+    const trh = document.createElement("tr");
+    ["Detectado em", "Rota", "De", "Para", "Tempo atual", "Tempo normal", "Atraso extra"].forEach(label => {
+      const th = document.createElement("th"); th.textContent = label; trh.appendChild(th);
+    });
+    thead.appendChild(trh);
+    table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    if (rows.length === 0) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 7; td.style.textAlign = "center"; td.style.color = "var(--text-secondary)";
+      td.textContent = "Nenhuma irregularidade detectada nas últimas coletas.";
+      tr.appendChild(td); tbody.appendChild(tr);
+    } else {
+      rows.forEach(r => {
+        const tr = document.createElement("tr");
+        const vals = [
+          fmtTime(r.t), r.name || "—", r.fromName || "—", r.toName || "—",
+          r.time_s != null ? Math.round(r.time_s / 60) + " min" : "—",
+          r.historicTime_s != null ? Math.round(r.historicTime_s / 60) + " min" : "—",
+          r.delay_s != null ? "+" + Math.round(r.delay_s / 60) + " min" : "—"
+        ];
+        vals.forEach(v => { const td = document.createElement("td"); td.textContent = v; tr.appendChild(td); });
+        tbody.appendChild(tr);
+      });
+    }
     table.appendChild(tbody);
   }
 
@@ -1347,6 +1388,7 @@
   updateAccidentBadge();
   renderView(buildView(null));
   renderTable();
+  renderIrregularitiesTable();
   showUpdateToast();
 
   document.getElementById("btn-table").addEventListener("click", () => {

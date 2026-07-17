@@ -123,6 +123,35 @@ try {
     $tvCsv = Join-Path $processedDir "traffic_view.csv"
     $tvExists = Test-Path $tvCsv
     [PSCustomObject]$tvRow | Export-Csv -Path $tvCsv -NoTypeInformation -Append:$tvExists -Encoding utf8
+
+    # ---------- Irregularities (anomalias de trafego detectadas pelo Waze vs tempo historico da rota) ----------
+    $irregRows = foreach ($ir in $tv.irregularities) {
+        $irLat = $null; $irLon = $null
+        if ($ir.line -and $ir.line.Count -gt 0) {
+            $irLat = [math]::Round((($ir.line | ForEach-Object { [double]$_.y } | Measure-Object -Average).Average), 6)
+            $irLon = [math]::Round((($ir.line | ForEach-Object { [double]$_.x } | Measure-Object -Average).Average), 6)
+        }
+        [PSCustomObject]@{
+            collected_at = $collectedAt.ToString("s")
+            id           = $ir.id
+            name         = $ir.name
+            fromName     = $ir.fromName
+            toName       = $ir.toName
+            jamLevel     = $ir.jamLevel
+            length_m     = $ir.length
+            time_s       = $ir.time
+            historicTime_s = $ir.historicTime
+            delay_s      = if ($ir.time -and $ir.historicTime) { [int]$ir.time - [int]$ir.historicTime } else { $null }
+            type         = $ir.type
+            lat          = $irLat
+            lon          = $irLon
+        }
+    }
+    if ($irregRows) {
+        $irregCsv = Join-Path $processedDir "irregularities.csv"
+        $irregExists = Test-Path $irregCsv
+        $irregRows | Export-Csv -Path $irregCsv -NoTypeInformation -Append:$irregExists -Encoding utf8
+    }
 }
 catch {
     Add-Content -Path (Join-Path $processedDir "collection_log.csv") -Value "$($collectedAt.ToString('s')),ERROR_TRAFFICVIEW,$($_.Exception.Message)"

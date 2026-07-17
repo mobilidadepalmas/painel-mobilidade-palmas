@@ -96,6 +96,7 @@ function Get-EnrichedViaCached($uuid, $street, $lat, $lon) {
 $alerts = Import-CsvSafe (Join-Path $processedDir "alerts.csv")
 $jams   = Import-CsvSafe (Join-Path $processedDir "jams.csv")
 $tv     = Import-CsvSafe (Join-Path $processedDir "traffic_view.csv")
+$irregularities = Import-CsvSafe (Join-Path $processedDir "irregularities.csv")
 
 $latestAlertsTs = ($alerts | Select-Object -ExpandProperty collected_at -Unique | Sort-Object -Descending | Select-Object -First 1)
 $latestJamsTs   = ($jams   | Select-Object -ExpandProperty collected_at -Unique | Sort-Object -Descending | Select-Object -First 1)
@@ -319,6 +320,23 @@ $tvTableRows = @($tvSorted | Select-Object -Last 50 | ForEach-Object {
     }
 })
 
+# ---- irregularidades de transito (anomalias detectadas pelo Waze comparando com o tempo historico da rota -- diferente dos jams, que sao reportados por usuario) ----
+$irregularitiesRows = @($irregularities | Sort-Object collected_at -Descending | Select-Object -First 50 | ForEach-Object {
+    [ordered]@{
+        t              = $_.collected_at
+        name           = $_.name
+        fromName       = $_.fromName
+        toName         = $_.toName
+        jamLevel       = Get-NumOrNull $_.jamLevel
+        length_m       = Get-NumOrNull $_.length_m
+        time_s         = Get-NumOrNull $_.time_s
+        historicTime_s = Get-NumOrNull $_.historicTime_s
+        delay_s        = Get-NumOrNull $_.delay_s
+        lat            = Get-NumOrNull $_.lat
+        lon            = Get-NumOrNull $_.lon
+    }
+})
+
 $data = [ordered]@{
     generatedAt    = (Get-Date).ToString("s")
     lastCollection = $latestJamsTs
@@ -339,6 +357,8 @@ $data = [ordered]@{
     topStreetsDetail = $topStreetsDetail
     rawAlerts      = $rawAlerts
     rawJams        = $rawJams
+    irregularities = $irregularitiesRows
+    irregularitiesTotalCount = $irregularities.Count
     timeSeries   = [ordered]@{
         timestamps    = $timestamps
         usersByLevel  = $usersByLevel
