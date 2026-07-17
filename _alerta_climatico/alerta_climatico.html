@@ -1,0 +1,215 @@
+﻿<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>Alerta Climático — Palmas (SEMOB)</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --page: #f9f9f7; --text-primary: #0b0b0b; --text-secondary: #52514e;
+    --text-muted: #898781; --border: rgba(11,11,11,0.10);
+    --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b; --info: #2a78d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --page: #0d0d0d; --text-primary: #ffffff; --text-secondary: #c3c2b7;
+      --text-muted: #898781; --border: rgba(255,255,255,0.10);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1: #1a1a19; --page: #0d0d0d; --text-primary: #ffffff; --text-secondary: #c3c2b7;
+    --text-muted: #898781; --border: rgba(255,255,255,0.10);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px; background: var(--page); color: var(--text-primary); font-family: -apple-system, "Segoe UI", Arial, sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 4px 0; }
+  .sub { font-size: 12px; color: var(--text-secondary); margin-bottom: 16px; }
+  .status-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+  @media (max-width: 620px) { .status-row { grid-template-columns: 1fr; } }
+  .status-card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 16px; border-left: 6px solid var(--good); }
+  .status-card .label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-secondary); font-weight: 700; }
+  .status-card .value { font-size: 20px; font-weight: 800; margin: 6px 0 4px; display:flex; align-items:center; gap:8px; }
+  .status-card .detail { font-size: 12px; color: var(--text-secondary); }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; }
+  .dot.pulse { animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.4;} }
+  @media (prefers-reduced-motion: reduce) { .dot.pulse { animation: none; } }
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+  .card h3 { font-size: 13.5px; margin: 0 0 6px; display:flex; align-items:center; gap:8px; }
+  .card .meta { font-size: 11.5px; color: var(--text-muted); margin-bottom: 6px; }
+  .card p { font-size: 12.5px; color: var(--text-secondary); margin: 4px 0; line-height: 1.45; }
+  .badge { display:inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing:.03em; padding: 3px 9px; border-radius: 20px; color:#1a1a19; }
+  .empty { font-size: 12.5px; color: var(--text-muted); padding: 10px 2px; }
+  .footer { font-size: 10.5px; color: var(--text-muted); margin-top: 18px; line-height: 1.5; }
+</style>
+</head>
+<body>
+  <h1>Alerta Climático — Palmas (TO)</h1>
+  <div class="sub" id="subGenerated"></div>
+
+  <div class="status-row">
+    <div class="status-card" id="cardChuva">
+      <div class="label">Chuva / Tempestade (INMET)</div>
+      <div class="value" id="valChuva">—</div>
+      <div class="detail" id="detChuva">—</div>
+    </div>
+    <div class="status-card" id="cardQueimada">
+      <div class="label">Queimada / Fumaça (INPE)</div>
+      <div class="value" id="valQueimada">—</div>
+      <div class="detail" id="detQueimada">—</div>
+    </div>
+  </div>
+
+  <div id="listaAvisos"></div>
+
+  <div class="footer" id="footer"></div>
+
+<script id="data-json" type="application/json">{
+    "generatedAt":  "2026-07-17T19:30:35",
+    "inmetAlerts":  [
+                        {
+                            "id_aviso":  27827,
+                            "descricao":  "Baixa Umidade",
+                            "severidade":  "Perigo Potencial",
+                            "cor":  "#FFFE00",
+                            "data_inicio":  "2026-07-17T00:00:00.000Z",
+                            "hora_inicio":  "12:00",
+                            "data_fim":  "2026-07-17T00:00:00.000Z",
+                            "hora_fim":  "18:00",
+                            "riscos":  [
+                                           "Umidade relativa do ar variando entre 30% e 20%. Baixo risco de incêndios florestais e à saúde."
+                                       ],
+                            "instrucoes":  [
+                                               "Beba bastante líquido.  ",
+                                               "Evite desgaste físico nas horas mais secas. ",
+                                               "Evite exposição ao sol nas horas mais quentes do dia. ",
+                                               "Obtenha mais informações junto à Defesa Civil (telefone 199) e ao Corpo de Bombeiros (telefone 193)."
+                                           ]
+                        },
+                        {
+                            "id_aviso":  27832,
+                            "descricao":  "Baixa Umidade",
+                            "severidade":  "Perigo Potencial",
+                            "cor":  "#FFFE00",
+                            "data_inicio":  "2026-07-18T00:00:00.000Z",
+                            "hora_inicio":  "12:00",
+                            "data_fim":  "2026-07-18T00:00:00.000Z",
+                            "hora_fim":  "18:00",
+                            "riscos":  [
+                                           "Umidade relativa do ar variando entre 30% e 20%. Baixo risco de incêndios florestais e à saúde."
+                                       ],
+                            "instrucoes":  [
+                                               "Beba bastante líquido.  ",
+                                               "Evite desgaste físico nas horas mais secas. ",
+                                               "Evite exposição ao sol nas horas mais quentes do dia. ",
+                                               "Obtenha mais informações junto à Defesa Civil (telefone 199) e ao Corpo de Bombeiros (telefone 193)."
+                                           ]
+                        },
+                        {
+                            "id_aviso":  27824,
+                            "descricao":  "Vendaval",
+                            "severidade":  "Perigo Potencial",
+                            "cor":  "#FFFE00",
+                            "data_inicio":  "2026-07-19T00:00:00.000Z",
+                            "hora_inicio":  "00:00",
+                            "data_fim":  "2026-07-19T00:00:00.000Z",
+                            "hora_fim":  "23:59",
+                            "riscos":  [
+                                           "Vento variando entre 40 km/h e 60 km/h. Baixo risco de queda de galhos de árvores."
+                                       ],
+                            "instrucoes":  [
+                                               "Em caso de rajadas de vento: (não se abrigue debaixo de árvores, pois há leve risco de queda e descargas elétricas e não estacione veículos próximos a torres de transmissão e placas de propaganda). ",
+                                               "Obtenha mais informações junto à Defesa Civil (telefone 199) e ao Corpo de Bombeiros (telefone 193)."
+                                           ]
+                        }
+                    ],
+    "queimada":  {
+                     "nivel":  "sem_foco",
+                     "focosRaioAlto":  0,
+                     "focosRaioRegional":  1,
+                     "raioAltoKm":  50,
+                     "raioRegionalKm":  150,
+                     "arquivoFonte":  "focos_10min_20260717_1930.csv",
+                     "focos":  [
+
+                               ]
+                 }
+}
+</script>
+<script>
+(function(){
+  var DATA = JSON.parse(document.getElementById('data-json').textContent);
+
+  function fmtDateTime(iso) {
+    if (!iso) return '—';
+    var s = iso.replace(' ', 'T');
+    if (!/[Zz]|[+-]\d\d:\d\d$/.test(s)) s += 'Z';
+    var d = new Date(s);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+  }
+
+  document.getElementById('subGenerated').textContent = 'Atualizado em ' + fmtDateTime(DATA.generatedAt) + ' — fontes: INMET (avisos oficiais) e INPE Programa Queimadas (focos de calor por satélite)';
+
+  // ---------- card chuva/tempestade ----------
+  var alerts = DATA.inmetAlerts || [];
+  var corCard = 'var(--good)';
+  var valChuva, detChuva;
+  if (alerts.length === 0) {
+    valChuva = '<span class="dot" style="background:var(--good)"></span> Sem aviso ativo';
+    detChuva = 'Nenhum aviso de perigo do INMET cobrindo Palmas no momento.';
+  } else {
+    var pior = alerts[0];
+    var cores = { 'Perigo Potencial': 'var(--warning)', 'Perigo': 'var(--serious)', 'Grande Perigo': 'var(--critical)' };
+    corCard = cores[pior.severidade] || 'var(--warning)';
+    valChuva = '<span class="dot pulse" style="background:' + corCard + '"></span> ' + alerts.length + ' aviso' + (alerts.length > 1 ? 's' : '') + ' ativo' + (alerts.length > 1 ? 's' : '');
+    detChuva = alerts.map(function(a){ return a.descricao; }).join(', ');
+  }
+  document.getElementById('valChuva').innerHTML = valChuva;
+  document.getElementById('detChuva').textContent = detChuva;
+  document.getElementById('cardChuva').style.borderLeftColor = corCard;
+
+  // ---------- card queimada ----------
+  var q = DATA.queimada || {};
+  var nivelInfo = {
+    'sem_foco':  { txt: 'Sem foco próximo', cor: 'var(--good)' },
+    'baixo':     { txt: 'Risco baixo', cor: 'var(--warning)' },
+    'moderado':  { txt: 'Risco moderado', cor: 'var(--serious)' },
+    'alto':      { txt: 'Risco alto', cor: 'var(--critical)' }
+  };
+  var ni = nivelInfo[q.nivel] || nivelInfo['sem_foco'];
+  var pulseQ = (q.nivel && q.nivel !== 'sem_foco') ? ' pulse' : '';
+  document.getElementById('valQueimada').innerHTML = '<span class="dot' + pulseQ + '" style="background:' + ni.cor + '"></span> ' + ni.txt;
+  document.getElementById('detQueimada').textContent = (q.focosRaioAlto || 0) + ' foco(s) a menos de ' + (q.raioAltoKm || '—') + ' km · ' + (q.focosRaioRegional || 0) + ' foco(s) a menos de ' + (q.raioRegionalKm || '—') + ' km de Palmas';
+  document.getElementById('cardQueimada').style.borderLeftColor = ni.cor;
+
+  // ---------- lista de avisos INMET ----------
+  var wrap = document.getElementById('listaAvisos');
+  if (alerts.length === 0) {
+    var emptyDiv = document.createElement('div');
+    emptyDiv.className = 'empty';
+    emptyDiv.textContent = 'Nenhum aviso climático ativo ou previsto para Palmas no momento.';
+    wrap.appendChild(emptyDiv);
+  } else {
+    alerts.forEach(function(a){
+      var card = document.createElement('div');
+      card.className = 'card';
+      var cor = { 'Perigo Potencial': '#fab219', 'Perigo': '#ec835a', 'Grande Perigo': '#d03b3b' }[a.severidade] || '#fab219';
+      var riscosTxt = (a.riscos || []).join(' ');
+      var instrTxt = (a.instrucoes || []).join(' ');
+      card.innerHTML =
+        '<h3>' + a.descricao + ' <span class="badge" style="background:' + cor + '">' + a.severidade + '</span></h3>' +
+        '<div class="meta">' + (a.data_inicio ? fmtDateTime(a.data_inicio).split(' ')[0] : '') + ' ' + (a.hora_inicio || '') + ' até ' + (a.data_fim ? fmtDateTime(a.data_fim).split(' ')[0] : '') + ' ' + (a.hora_fim || '') + '</div>' +
+        (riscosTxt ? '<p><b>Risco:</b> ' + riscosTxt + '</p>' : '') +
+        (instrTxt ? '<p><b>Instruções:</b> ' + instrTxt + '</p>' : '');
+      wrap.appendChild(card);
+    });
+  }
+
+  document.getElementById('footer').textContent = 'Coleta automática a cada poucos minutos. Fontes públicas e gratuitas: INMET (apiprevmet3.inmet.gov.br) e INPE Programa Queimadas (dataserver-coids.inpe.br).';
+})();
+</script>
+</body>
+</html>
