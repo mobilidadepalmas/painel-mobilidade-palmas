@@ -182,3 +182,5 @@
 2026-07-26T04:37:31,OK,alerts=24;jams=20
 2026-07-26T07:14:55,OK,alerts=24;jams=21
 2026-07-26T09:23:45,OK,alerts=26;jams=20
+2026-07-26T10:56:13,ERROR_TRAFFICVIEW,Response status code does not indicate success: 500 (Internal Server Error).
+2026-07-26T10:56:13,OK,alerts=69;jams=66
