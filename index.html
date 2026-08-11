@@ -2029,9 +2029,9 @@ table.data td.tx{font-variant-numeric:normal; white-space:normal;}
           </div>
           <p class="sub period-note">
             <svg viewBox="0 0 24 24"><path d="M12 8v5M12 16v.1" stroke-linecap="round"/><circle cx="12" cy="12" r="9.5"/></svg>
-            <span>O ranking, os picos por horário e a distribuição por corredor abaixo recalculam para o período escolhido. Perfil horário, dia da semana e feriado×facultativo continuam fixos nos 15 meses completos (exigem reprocessar dado diário/horário por período, fora do escopo desta atualização).</span>
+            <span>O ranking, os picos por horário e a distribuição por corredor abaixo recalculam para o período escolhido. Perfil horário, dia da semana e feriado×facultativo continuam fixos no snapshot de 15 meses (mar/25–mai/26) — ainda não inclui jun/jul de 2026 (exigem reprocessar dado diário/horário por período, fora do escopo desta atualização).</span>
           </p>
-          <p class="period-methodnote" id="periodMethodNote">Período diferente de "15 meses completos": ranking e corredor usam uma classificação simplificada de endereço e média por dias corridos (não dias operacionais) — pequenas diferenças frente aos números consolidados de 15 meses são esperadas e não são erro.</p>
+          <p class="period-methodnote" id="periodMethodNote">Período diferente de "17 meses completos": ranking e corredor usam uma classificação simplificada de endereço e média por dias corridos (não dias operacionais) — pequenas diferenças frente aos números consolidados de 17 meses são esperadas e não são erro.</p>
         </section>
 
         <section class="blk">
@@ -2039,7 +2039,7 @@ table.data td.tx{font-variant-numeric:normal; white-space:normal;}
             <div>
               <div class="eyebrow">Ranking geral</div>
               <h2>Top 10 pontos de maior fluxo</h2>
-              <p class="sub">Média diária real por processador/sentido — <span id="rankPeriodLabel">15 meses completos (mar/25–mai/26)</span>, base dos radares curados.</p>
+              <p class="sub">Média diária real por processador/sentido — <span id="rankPeriodLabel">17 meses completos (mar/25–jul/26)</span>, base dos radares curados.</p>
             </div>
           </div>
           <div class="card">
@@ -2062,12 +2062,12 @@ table.data td.tx{font-variant-numeric:normal; white-space:normal;}
             <div>
               <div class="eyebrow">Padrão pendular</div>
               <h2>Três janelas de pico, três lógicas diferentes</h2>
-              <p class="sub">Manhã é quase só entrada (Sul→Norte); tarde é quase só retorno (Norte→Sul); meio-dia mistura os dois sentidos — <span id="peakPeriodLabel">15 meses completos</span>.</p>
+              <p class="sub">Manhã é quase só entrada (Sul→Norte); tarde é quase só retorno (Norte→Sul); meio-dia mistura os dois sentidos — <span id="peakPeriodLabel">17 meses completos</span>.</p>
             </div>
           </div>
           <div class="period-recap">
             <span class="prl">Período ativo:</span>
-            <button class="period-btn active" data-period="15m">15 meses</button>
+            <button class="period-btn active" data-period="15m">17 meses</button>
             <button class="period-btn" data-period="q1_2026">1º tri 26</button>
             <button class="period-btn" data-period="q2_2026">2º tri 26</button>
             <button class="period-btn" data-period="dow_Segunda">Seg</button>
@@ -2147,12 +2147,12 @@ table.data td.tx{font-variant-numeric:normal; white-space:normal;}
             <div>
               <div class="eyebrow">Distribuição por corredor</div>
               <h2>Onde o fluxo da cidade está concentrado</h2>
-              <p class="sub">Fluxo consolidado — <span id="corridorPeriodLabel">15 meses, 79 pontos de monitoramento</span>, agrupados pelo eixo viário onde cada radar está fisicamente instalado.</p>
+              <p class="sub">Fluxo consolidado — <span id="corridorPeriodLabel">17 meses, 73 pontos de monitoramento</span>, agrupados pelo eixo viário onde cada radar está fisicamente instalado.</p>
             </div>
           </div>
           <div class="period-recap">
             <span class="prl">Período ativo:</span>
-            <button class="period-btn active" data-period="15m">15 meses</button>
+            <button class="period-btn active" data-period="15m">17 meses</button>
             <button class="period-btn" data-period="q1_2026">1º tri 26</button>
             <button class="period-btn" data-period="q2_2026">2º tri 26</button>
             <button class="period-btn" data-period="dow_Segunda">Seg</button>
@@ -47821,7 +47821,7 @@ table.data td.tx{font-variant-numeric:normal; white-space:normal;}
       document.getElementById('festBanner').classList.toggle('show', key === 'eventos');
       var meta = document.getElementById('topMeta');
       if (key === 'fluxo'){
-        meta.innerHTML = '<span class="chip"><span class="dot"></span>15 meses · mar/2025–mai/2026</span><span class="chip">73 radares curados · 206 processadores</span>';
+        meta.innerHTML = '<span class="chip"><span class="dot"></span>17 meses · mar/2025–jul/2026</span><span class="chip">73 radares curados · 222 processadores</span>';
       } else if (key === 'eventos'){
         meta.innerHTML = '<span class="chip"><span class="dot"></span>13 eventos mapeados</span><span class="chip">Fluxo real do dia × média do mesmo dia da semana</span>';
       } else if (key === 'mapavet'){
@@ -47870,7 +47870,7 @@ table.data td.tx{font-variant-numeric:normal; white-space:normal;}
     var DESCR = {
       'Observatório da Mobilidade': 'Mapa vetorial interativo com camadas territoriais selecionáveis (segurança viária, transporte coletivo, acessibilidade, centralidades e equipamentos, indicadores), a partir do banco vetorial do PlanMob e da base do Observatório.',
       'Alerta Climático': 'Chuva forte/tempestade (INMET) e queimadas com risco de fumaça/visibilidade (INPE Programa Queimadas) que podem afetar o trânsito em Palmas — dados ao vivo, atualizados automaticamente.',
-      'Dados de Fluxo de Veículos': 'Ranking dos pontos de maior fluxo, picos por horário e distribuição por corredor — 15 meses de dados reais dos radares.',
+      'Dados de Fluxo de Veículos': 'Ranking dos pontos de maior fluxo, picos por horário e distribuição por corredor — 17 meses de dados reais dos radares.',
       'Dados de Fluxo em Dias de Eventos Típicos': 'Como grandes eventos de Palmas afetam o trânsito, comparando cada dia com sua média normal (mesmo dia da semana ou feriado).',
       'Mapeamento do Monitoramento': '87 radares e 44 câmeras PTZ geolocalizados ao vivo sobre a malha viária real de Palmas.',
       'Clustering de Radares por Perfil Horário': 'Agrupamento automático (K-means) dos 73 radares curados pelo FORMATO da curva de 24h — não pelo volume — revelando famílias de comportamento como comutador pendular, comercial/pico vespertino e comutador matutino.',
@@ -47951,12 +47951,15 @@ table.data td.tx{font-variant-numeric:normal; white-space:normal;}
   // fluxo_por_processador.csv + base_sentido_fluxo_horario.csv — cobre mar/2025 a jul/2026 (17 meses).
   var FULL_RANK = JSON.parse(document.getElementById('fullRankData').textContent);
   window.PERIODS = PERIODS; window.FULL_RANK = FULL_RANK; // ponte para o IIFE dos mini-mapas de ponto crítico
-  // dias da semana: soma de todas as ocorrências daquele dia em 15 meses (mar/25-jun/26),
-  // calculado por processador (não é o mesmo cálculo agregado usado no gráfico horário por dia da semana)
+  // dias da semana: soma de todas as ocorrências daquele dia em 15 meses (mar/25-mai/26) —
+  // snapshot antigo, ainda não reprocessado com jun/jul de 2026 (precisa de dado diário/horário,
+  // fora do escopo da atualização de ago/2026), calculado por processador (não é o mesmo cálculo
+  // agregado usado no gráfico horário por dia da semana)
   var DOW_RANK = JSON.parse(document.getElementById('dowRankData').textContent);
   Object.keys(DOW_RANK).forEach(function(k){ PERIODS.periods[k] = DOW_RANK[k]; });
-  // "15 meses completos" usa os números já validados (Fluxo_Diario_Medio oficial),
-  // não o recalculo simplificado por dias corridos usado nos demais períodos.
+  // "15m" (rótulo "17 meses completos") usa os números já validados (Fluxo_Diario_Medio oficial,
+  // recalculado a cada atualização), não o recalculo simplificado por dias corridos usado nos
+  // demais períodos.
   PERIODS.periods['15m'] = {
     label: '17 meses completos (mar/25–jul/26)',
     top10: [
