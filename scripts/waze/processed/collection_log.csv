@@ -871,3 +871,5 @@
 2026-08-20T20:32:00,OK,alerts=24;jams=22
 2026-08-20T20:57:25,OK,alerts=26;jams=24
 2026-08-20T21:20:21,OK,alerts=26;jams=21
+2026-08-20T21:47:16,ERROR_TRAFFICVIEW,Response status code does not indicate success: 502 (Bad Gateway).
+2026-08-20T21:47:16,OK,alerts=29;jams=25
